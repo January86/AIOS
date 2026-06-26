@@ -1,4 +1,4 @@
-import { createEvent, KernelState } from "../../contracts/src/index.js";
+import { createEvent, EventType, KernelState } from "../../contracts/src/index.js";
 import type { KernelService, ServiceHealth } from "../../contracts/src/index.js";
 import type { InMemoryEventBus } from "../../events/src/index.js";
 import { ServiceRegistry } from "./service-registry.js";
@@ -49,7 +49,7 @@ export class AIOSKernel {
 
     await this.transition(KernelState.BOOTING);
     await this.eventBus.publish(
-      createEvent({ type: "kernel.boot.started", source: "kernel", payload: { state: this.state } })
+      createEvent({ type: EventType.KERNEL_BOOT_STARTED, source: "kernel", payload: { state: this.state } })
     );
 
     try {
@@ -59,7 +59,7 @@ export class AIOSKernel {
         this.registry.markStarted(service.name);
         await this.eventBus.publish(
           createEvent({
-            type: "kernel.service.started",
+            type: EventType.KERNEL_SERVICE_STARTED,
             source: "kernel",
             payload: { name: service.name },
           })
@@ -70,7 +70,7 @@ export class AIOSKernel {
       await this.transition(KernelState.RUNNING);
       await this.eventBus.publish(
         createEvent({
-          type: "kernel.boot.completed",
+          type: EventType.KERNEL_BOOT_COMPLETED,
           source: "kernel",
           payload: { startedAt: this.startedAt },
         })
@@ -80,7 +80,7 @@ export class AIOSKernel {
       await this.transition(KernelState.ERROR);
       await this.eventBus.publish(
         createEvent({
-          type: "kernel.error.occurred",
+          type: EventType.KERNEL_ERROR_OCCURRED,
           source: "kernel",
           severity: "critical",
           payload: { error: this.lastError },
@@ -98,7 +98,7 @@ export class AIOSKernel {
     await this.transition(KernelState.SHUTTING_DOWN);
     await this.eventBus.publish(
       createEvent({
-        type: "kernel.shutdown.started",
+        type: EventType.KERNEL_SHUTDOWN_STARTED,
         source: "kernel",
         payload: { reason },
       })
@@ -110,7 +110,7 @@ export class AIOSKernel {
 
     await this.transition(KernelState.STOPPED);
     await this.eventBus.publish(
-      createEvent({ type: "kernel.shutdown.completed", source: "kernel" })
+      createEvent({ type: EventType.KERNEL_SHUTDOWN_COMPLETED, source: "kernel" })
     );
   }
 
@@ -120,7 +120,7 @@ export class AIOSKernel {
     }
 
     await this.eventBus.publish(
-      createEvent({ type: "kernel.recovery.started", source: "kernel" })
+      createEvent({ type: EventType.KERNEL_RECOVERY_STARTED, source: "kernel" })
     );
 
     this.lastError = undefined;
@@ -128,7 +128,7 @@ export class AIOSKernel {
     await this.boot();
 
     await this.eventBus.publish(
-      createEvent({ type: "kernel.recovery.completed", source: "kernel" })
+      createEvent({ type: EventType.KERNEL_RECOVERY_COMPLETED, source: "kernel" })
     );
   }
 
@@ -156,7 +156,7 @@ export class AIOSKernel {
 
     await this.eventBus.publish(
       createEvent({
-        type: "kernel.health.checked",
+        type: EventType.KERNEL_HEALTH_CHECKED,
         source: "kernel",
         payload: { status, serviceCount: services.length },
       })

@@ -1,4 +1,4 @@
-import { createEvent } from "../../contracts/src/index.js";
+import { createEvent, EventType } from "../../contracts/src/index.js";
 import type { KernelService, ServiceHealth } from "../../contracts/src/index.js";
 import type { InMemoryEventBus } from "../../events/src/index.js";
 
@@ -19,7 +19,7 @@ export class ServiceRegistry {
     this.entries.set(service.name, { service });
     void this.eventBus.publish(
       createEvent({
-        type: "kernel.service.registered",
+        type: EventType.KERNEL_SERVICE_REGISTERED,
         source: "service-registry",
         payload: { name: service.name },
       })
@@ -33,7 +33,7 @@ export class ServiceRegistry {
     this.entries.delete(name);
     void this.eventBus.publish(
       createEvent({
-        type: "kernel.service.unregistered",
+        type: EventType.KERNEL_SERVICE_UNREGISTERED,
         source: "service-registry",
         payload: { name },
       })
