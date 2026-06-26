@@ -84,13 +84,18 @@ export class MonitoringAgent extends BaseAgent {
       console.log(`[ARIA] alert sent for ${projectId}`);
     }
 
-    const memoryTitle = `${projectId} health: ${healthy ? "HEALTHY" : "DOWN"}`;
+    const memoryTitle = healthy
+      ? `${projectId}: health check passed`
+      : `${projectId}: health check failed`;
+
+    const contentLines = [...findings, `Checked at: ${new Date().toISOString()}`];
+    if (!healthy && errorMessage) contentLines.push(`Error: ${errorMessage}`);
 
     const memoryStored = await this.storeMemory({
       type: memoryType,
       scope: MemoryScope.PROJECT,
       title: memoryTitle,
-      content: findings.join(". "),
+      content: contentLines.join(". "),
       tags: ["health-check", projectId, healthy ? "healthy" : "down"],
       projectId,
       agentId: this.definition.id,

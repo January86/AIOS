@@ -59,24 +59,36 @@ const now = new Date().toISOString();
 
 projectRegistry.registerProject({
   id: "ha-platform",
-  name: "Hospitality AI Platform",
-  description: "AI-powered platform for hospitality management",
+  name: "Hospitality Agent Platform",
+  description: "AI-powered hospitality management platform with WhatsApp integration",
   tier: ProjectTier.UPSCALE,
   path: "/home/administrator/projects/ha-platform",
   port: 3000,
-  tags: ["production", "hospitality"],
+  healthEndpoint: "http://157.15.40.56:3000/health",
+  tags: ["production", "hospitality", "whatsapp", "ai"],
   createdAt: now,
   updatedAt: now,
 });
 
 projectRegistry.registerProject({
   id: "executive-brief",
-  name: "Executive Brief",
-  description: "AI-curated executive news briefings",
+  name: "Executive Brief (Ensiklomedia)",
+  description: "AI-powered daily news briefing for government institutions in NTB",
   tier: ProjectTier.STANDARD,
   path: "/home/administrator/projects/executive-brief",
-  port: 3001,
-  tags: ["production", "news"],
+  healthEndpoint: "https://ensiklomedia.id",
+  tags: ["production", "news", "government", "nlp"],
+  createdAt: now,
+  updatedAt: now,
+});
+
+projectRegistry.registerProject({
+  id: "baron-trading",
+  name: "Baron Trading System",
+  description: "Algorithmic trading bot with LangGraph pipeline and LLM ensemble voting",
+  tier: ProjectTier.ENTERPRISE,
+  path: "/opt/trading-agent-trio",
+  tags: ["production", "trading", "ai", "forex"],
   createdAt: now,
   updatedAt: now,
 });

@@ -65,7 +65,7 @@ export class ReporterAgent extends BaseAgent {
     const memoryStored = await this.storeMemory({
       type: MemoryType.EPISODIC,
       scope: MemoryScope.GLOBAL,
-      title: "Daily Status Report",
+      title: "AIOS Daily Status Report",
       content: summary,
       tags: ["report", "status", "daily"],
       agentId: this.definition.id,

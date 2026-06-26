@@ -21,6 +21,7 @@ export interface ProjectConfig {
   tier: ProjectTier;
   path: string;
   port?: number;
+  healthEndpoint?: string;
   tags: string[];
   createdAt: string;
   updatedAt: string;

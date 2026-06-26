@@ -153,7 +153,17 @@ export abstract class BaseAgent {
         query: input.title,
         limit: 1,
       });
-      if (existing.length > 0) return false;
+
+      if (existing.length > 0) {
+        const found = existing[0];
+        if (found.type === input.type && found.projectId === input.projectId) {
+          return false;
+        }
+        // State changed (e.g. FAILURE → SUCCESS) — replace stale record
+        await this.memoryEngine.forget(found.id);
+        console.log(`[MEMORY] updated: ${input.title}`);
+      }
+
       await this.memoryEngine.remember(input);
       return true;
     } catch (error) {
