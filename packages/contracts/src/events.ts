@@ -15,10 +15,14 @@ export enum EventType {
   KERNEL_SERVICE_REGISTERED = "kernel.service.registered",
   KERNEL_SERVICE_UNREGISTERED = "kernel.service.unregistered",
   KERNEL_HEALTH_CHECKED = "kernel.health.checked",
-  // Project (future)
+  // Project
   PROJECT_CREATED = "project.created",
   PROJECT_UPDATED = "project.updated",
   PROJECT_DELETED = "project.deleted",
+  PROJECT_REGISTERED = "project.registered",
+  PROJECT_UNREGISTERED = "project.unregistered",
+  PROJECT_HEALTH_UPDATED = "project.health.updated",
+  PROJECT_STATE_CHANGED = "project.state.changed",
   // Agent (future)
   AGENT_SPAWNED = "agent.spawned",
   AGENT_COMPLETED = "agent.completed",
