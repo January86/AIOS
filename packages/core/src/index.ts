@@ -14,6 +14,7 @@ import { ProjectRegistry } from "../../project-runtime/src/index.js";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../../../generated/prisma/client.js";
 import { AIOSKernel } from "./kernel.js";
+import { AgentRuntime } from "./agents/index.js";
 import { MonitoringWorker } from "./monitoring/index.js";
 import { MockService } from "./services/mock-service.js";
 
@@ -31,12 +32,15 @@ const prisma = new PrismaClient({ adapter });
 const memoryStore = new MemoryStore(prisma);
 const memoryEngine = new MemoryEngine(memoryStore, eventBus);
 
+const agentRuntime = new AgentRuntime(eventBus, policyEngine, memoryEngine);
+
 kernel.registerService(new MockService("event-bus"));
 kernel.registerService(new MockService("configuration"));
 kernel.registerService(projectRegistry);
 kernel.registerService(monitoringWorker);
 kernel.registerService(policyEngine);
 kernel.registerService(memoryEngine);
+kernel.registerService(agentRuntime);
 
 console.log("[AIOS] Booting kernel...");
 await kernel.boot();
@@ -235,6 +239,67 @@ try {
 } catch (error) {
   console.error(
     "[AIOS] Memory engine error (non-fatal):",
+    error instanceof Error ? error.message : String(error)
+  );
+}
+
+// --- Agent Runtime ---
+console.log("\n[AIOS] Running agent tasks...\n");
+
+try {
+  const task1Result = await agentRuntime.assignTask("monitoring-agent-001", {
+    id: crypto.randomUUID(),
+    agentId: "monitoring-agent-001",
+    title: "Check ha-platform health",
+    description: "Run health check for ha-platform project",
+    input: {
+      projectId: "ha-platform",
+      healthy: false,
+      errorMessage: "fetch failed",
+      state: "error",
+    },
+    priority: "high",
+    createdAt: new Date().toISOString(),
+  });
+  console.log(`  [TASK DONE] Aria → ${task1Result.summary}`);
+
+  const task2Result = await agentRuntime.assignTask("monitoring-agent-001", {
+    id: crypto.randomUUID(),
+    agentId: "monitoring-agent-001",
+    title: "Check executive-brief health",
+    description: "Run health check for executive-brief project",
+    input: {
+      projectId: "executive-brief",
+      healthy: false,
+      errorMessage: "fetch failed",
+      state: "error",
+    },
+    priority: "high",
+    createdAt: new Date().toISOString(),
+  });
+  console.log(`  [TASK DONE] Aria → ${task2Result.summary}`);
+
+  const task3Result = await agentRuntime.assignTask("reporter-agent-001", {
+    id: crypto.randomUUID(),
+    agentId: "reporter-agent-001",
+    title: "Generate status report",
+    description: "Consolidate health check results into a status report",
+    input: { reports: [task1Result, task2Result] },
+    priority: "medium",
+    createdAt: new Date().toISOString(),
+  });
+  console.log(`  [TASK DONE] Nova → report generated`);
+
+  console.log("\n[AIOS] Agent Registry:");
+  for (const a of agentRuntime.listAgents()) {
+    console.log(`  ${a.id} | ${a.name} | role=${a.role} | state=${a.state}`);
+  }
+
+  console.log("\n[AIOS] Nova's Status Report:");
+  console.log(task3Result.summary);
+} catch (error) {
+  console.error(
+    "[AIOS] Agent runtime error (non-fatal):",
     error instanceof Error ? error.message : String(error)
   );
 }

@@ -15,13 +15,3 @@ export type ServiceState =
   | "failed"
   | "stopped";
 
-export type AgentState =
-  | "idle"
-  | "thinking"
-  | "working"
-  | "reviewing"
-  | "testing"
-  | "deploying"
-  | "blocked"
-  | "error"
-  | "offline";

@@ -29,10 +29,19 @@ export enum EventType {
   MONITORING_PROJECT_DOWN = "monitoring.project.down",
   MONITORING_PROJECT_RECOVERED = "monitoring.project.recovered",
   MONITORING_PROJECT_DEGRADED = "monitoring.project.degraded",
-  // Agent (future)
+  // Agent
   AGENT_SPAWNED = "agent.spawned",
   AGENT_COMPLETED = "agent.completed",
   AGENT_FAILED = "agent.failed",
+  AGENT_REGISTERED = "agent.registered",
+  AGENT_STARTED = "agent.started",
+  AGENT_STOPPED = "agent.stopped",
+  AGENT_TASK_ASSIGNED = "agent.task.assigned",
+  AGENT_TASK_STARTED = "agent.task.started",
+  AGENT_TASK_COMPLETED = "agent.task.completed",
+  AGENT_TASK_FAILED = "agent.task.failed",
+  AGENT_STATE_CHANGED = "agent.state.changed",
+  AGENT_REPORT_GENERATED = "agent.report.generated",
   // Policy
   POLICY_EVALUATED = "policy.evaluated",
   POLICY_VIOLATED = "policy.violated",
