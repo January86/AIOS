@@ -9,3 +9,5 @@ coverage/
 *.log
 
 /generated/prisma
+apps/command-center/.next/
+apps/command-center/node_modules/
