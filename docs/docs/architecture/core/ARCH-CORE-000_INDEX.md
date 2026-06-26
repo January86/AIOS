@@ -1,28 +1,41 @@
 ---
 id: ARCH-CORE-000
-title: Core Architecture Index
+title: Phase 1 Core Architecture Index
 version: 0.1
 status: Draft
 phase: 1
 owner: AIOS Chief Architect
 depends_on:
-  - BOOT-003
+  - ADR-0001
+  - ADR-0015
 last_updated: 2026-06-26
 ---
 
-# Core Architecture Index
+# Phase 1 Core Architecture Index
 
-Phase 1 will define the system architecture required to implement AIOS.
+## Phase 1 Documents
 
-## Planned Documents
+1. ARCH-KERNEL-001 Kernel Blueprint
+2. ARCH-EVENT-001 Event Bus Blueprint
+3. ARCH-WORKFLOW-001 Workflow Engine Blueprint
+4. ARCH-POLICY-001 Policy Engine Blueprint
+5. ARCH-MEMORY-001 Memory Engine Blueprint
+6. ARCH-PROJECT-001 Project Runtime Blueprint
+7. ARCH-PLUGIN-001 Plugin Runtime Blueprint
+8. ARCH-MODEL-001 Model Router Blueprint
+9. ARCH-TOOL-001 Tool Registry Blueprint
+10. ARCH-STATE-001 System State Model
+11. ARCH-API-001 Internal API Contract
+12. ARCH-DATA-001 Core Data Contract
 
-1. ARCH-CORE-001 Kernel Overview
-2. ARCH-CORE-002 Kernel Lifecycle
-3. ARCH-CORE-003 Event Bus Architecture
-4. ARCH-CORE-004 Workflow Engine Architecture
-5. ARCH-CORE-005 Policy Engine Architecture
-6. ARCH-CORE-006 Memory Engine Architecture
-7. ARCH-CORE-007 Plugin Manager Architecture
-8. ARCH-CORE-008 Project Runtime Architecture
-9. ARCH-CORE-009 Model Router Architecture
-10. ARCH-CORE-010 Tool Registry Architecture
+## Phase 1 Definition of Done
+
+Phase 1 is complete when:
+
+- Core module boundaries are explicit.
+- Event contracts are defined.
+- State model is defined.
+- Policy gates are defined.
+- Memory layers are defined.
+- Runtime responsibilities are clear.
+- Developer can begin implementation without guessing architecture.
