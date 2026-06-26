@@ -42,9 +42,12 @@ export enum EventType {
   POLICY_ACTION_DENIED = "policy.action.denied",
   POLICY_ACTION_ESCALATED = "policy.action.escalated",
   POLICY_AUDIT_LOGGED = "policy.audit.logged",
-  // Memory (future)
-  MEMORY_STORED = "memory.stored",
-  MEMORY_RETRIEVED = "memory.retrieved",
+  // Memory
+  MEMORY_CREATED = "memory.created",
+  MEMORY_UPDATED = "memory.updated",
+  MEMORY_SEARCHED = "memory.searched",
+  MEMORY_COMPRESSED = "memory.compressed",
+  MEMORY_EXPIRED = "memory.expired",
   MEMORY_EVICTED = "memory.evicted",
 }
 
