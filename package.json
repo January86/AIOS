@@ -1,0 +1,17 @@
+{
+  "name": "aios",
+  "version": "0.2.0",
+  "private": true,
+  "description": "AIOS - Artificial Intelligence Operating System",
+  "scripts": {
+    "docs:check": "echo "Docs check placeholder"",
+    "dev": "echo "AIOS dev placeholder"",
+    "lint": "echo "Lint placeholder"",
+    "test": "echo "Test placeholder""
+  },
+  "workspaces": [
+    "apps/*",
+    "services/*",
+    "packages/*"
+  ]
+}
