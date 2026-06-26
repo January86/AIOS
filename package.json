@@ -1,17 +1,20 @@
 {
   "name": "aios",
-  "version": "0.2.0",
+  "version": "1.1.0",
   "private": true,
   "description": "AIOS - Artificial Intelligence Operating System",
+  "type": "module",
   "scripts": {
-    "docs:check": "echo "Docs check placeholder"",
-    "dev": "echo "AIOS dev placeholder"",
-    "lint": "echo "Lint placeholder"",
-    "test": "echo "Test placeholder""
+    "dev": "tsx packages/core/src/index.ts",
+    "start": "node dist/packages/core/src/index.js",
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
-  "workspaces": [
-    "apps/*",
-    "services/*",
-    "packages/*"
-  ]
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
 }
