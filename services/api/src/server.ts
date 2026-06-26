@@ -20,6 +20,7 @@ interface Deps {
   eventBus: InMemoryEventBus;
   memoryEngine: MemoryEngine;
   policyEngine: PolicyEngine;
+  telegramConfigured: boolean;
 }
 
 function makeMeta() {
@@ -39,7 +40,7 @@ function fail(res: Response, message: string, status = 500) {
 }
 
 export function createServer(deps: Deps): express.Express {
-  const { kernel, projectRegistry, agentRuntime, eventBus, memoryEngine, policyEngine } = deps;
+  const { kernel, projectRegistry, agentRuntime, eventBus, memoryEngine, policyEngine, telegramConfigured } = deps;
   const app = express();
 
   app.use(cors());
@@ -49,7 +50,7 @@ export function createServer(deps: Deps): express.Express {
   app.get("/api/health", async (_req: Request, res: Response) => {
     try {
       const health = await kernel.healthCheck();
-      ok(res, health);
+      ok(res, { ...health, telegram_configured: telegramConfigured });
     } catch (e) {
       fail(res, e instanceof Error ? e.message : String(e));
     }

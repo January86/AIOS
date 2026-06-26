@@ -9,10 +9,15 @@ import { AIOSKernel } from "../../../packages/core/src/kernel.js";
 import { AgentRuntime } from "../../../packages/core/src/agents/index.js";
 import { MonitoringWorker } from "../../../packages/core/src/monitoring/index.js";
 import { MockService } from "../../../packages/core/src/services/mock-service.js";
+import { TelegramNotifier } from "../../../packages/core/src/telegram/index.js";
 import { ProjectTier } from "../../../packages/contracts/src/index.js";
 import { createServer } from "./server.js";
 
-// ── Bootstrap ────────────────────────────────────────────────────────────────
+// ── Telegram ──────────────────────────────────────────────────────────────────
+
+const notifier = new TelegramNotifier();
+
+// ── Bootstrap ─────────────────────────────────────────────────────────────────
 
 const eventBus = new InMemoryEventBus();
 const kernel = new AIOSKernel(eventBus);
@@ -25,7 +30,7 @@ const prisma = new PrismaClient({ adapter });
 const memoryStore = new MemoryStore(prisma);
 const memoryEngine = new MemoryEngine(memoryStore, eventBus);
 
-const agentRuntime = new AgentRuntime(eventBus, policyEngine, memoryEngine);
+const agentRuntime = new AgentRuntime(eventBus, policyEngine, memoryEngine, notifier);
 
 kernel.registerService(new MockService("event-bus"));
 kernel.registerService(new MockService("configuration"));
@@ -35,7 +40,7 @@ kernel.registerService(policyEngine);
 kernel.registerService(memoryEngine);
 kernel.registerService(agentRuntime);
 
-// ── Boot ─────────────────────────────────────────────────────────────────────
+// ── Boot ──────────────────────────────────────────────────────────────────────
 
 console.log("[API] Booting AIOS kernel...");
 await kernel.boot();
@@ -68,6 +73,10 @@ projectRegistry.registerProject({
   updatedAt: now,
 });
 
+// ── Wire monitoring auto-trigger ──────────────────────────────────────────────
+
+agentRuntime.subscribeToMonitoring();
+
 // ── Start Express ─────────────────────────────────────────────────────────────
 
 const app = createServer({
@@ -77,12 +86,12 @@ const app = createServer({
   eventBus,
   memoryEngine,
   policyEngine,
+  telegramConfigured: notifier.isConfigured(),
 });
 
 const PORT = 3333;
 const httpServer = app.listen(PORT, () => {
   console.log(`[API] AIOS Command Center API running on http://localhost:${PORT}`);
-  console.log(`[API] Endpoints:`);
   console.log(`[API]   GET  http://localhost:${PORT}/api/health`);
   console.log(`[API]   GET  http://localhost:${PORT}/api/system/state`);
   console.log(`[API]   GET  http://localhost:${PORT}/api/projects`);
@@ -91,7 +100,16 @@ const httpServer = app.listen(PORT, () => {
   console.log(`[API]   GET  http://localhost:${PORT}/api/events/stream  (SSE)`);
   console.log(`[API]   GET  http://localhost:${PORT}/api/memory`);
   console.log(`[API]   POST http://localhost:${PORT}/api/policy/evaluate`);
+  console.log(`[API] Telegram: ${notifier.isConfigured() ? "configured ✓" : "not configured"}`);
 });
+
+// ── Startup Telegram alert ────────────────────────────────────────────────────
+
+void notifier.sendAlert(
+  "AIOS Online",
+  "AIOS Alpha v2.0.0 is running\nKernel: healthy\nServices: 7\nProjects monitored: 2\nAgents: Aria, Nova",
+  "🚀"
+);
 
 // ── Graceful shutdown ─────────────────────────────────────────────────────────
 

@@ -11,6 +11,7 @@ import type {
 import type { InMemoryEventBus } from "../../../events/src/index.js";
 import type { MemoryEngine } from "../../../memory/src/index.js";
 import type { PolicyEngine } from "../../../policy/src/index.js";
+import type { TelegramNotifier } from "../telegram/telegram-notifier.js";
 import { BaseAgent } from "./base-agent.js";
 
 const ARIA_DEFINITION: AgentDefinition = {
@@ -24,6 +25,7 @@ const ARIA_DEFINITION: AgentDefinition = {
     "log-read",
     "incident-detect",
     "report-generate",
+    "telegram-alert",
   ],
   description: "Monitors project health and detects incidents",
 };
@@ -32,7 +34,8 @@ export class MonitoringAgent extends BaseAgent {
   constructor(
     eventBus: InMemoryEventBus,
     policyEngine: PolicyEngine,
-    memoryEngine: MemoryEngine
+    memoryEngine: MemoryEngine,
+    private readonly notifier?: TelegramNotifier
   ) {
     super(ARIA_DEFINITION, eventBus, policyEngine, memoryEngine);
   }
@@ -61,6 +64,24 @@ export class MonitoringAgent extends BaseAgent {
         "Notify DevOps agent",
       ];
       memoryType = MemoryType.FAILURE;
+    }
+
+    if (this.notifier?.isConfigured()) {
+      const ts = new Date().toISOString();
+      if (!healthy) {
+        await this.notifier.sendAlert(
+          `Project Down: ${projectId}`,
+          `Health check failed\nProject: ${projectId}\nError: ${errorMessage ?? "unknown"}\nTime: ${ts}`,
+          "🚨"
+        );
+      } else {
+        await this.notifier.sendAlert(
+          `Project Recovered: ${projectId}`,
+          `Project is back online\nProject: ${projectId}\nTime: ${ts}`,
+          "✅"
+        );
+      }
+      console.log(`[ARIA] alert sent for ${projectId}`);
     }
 
     const memoryTitle = `${projectId} health: ${healthy ? "HEALTHY" : "DOWN"}`;

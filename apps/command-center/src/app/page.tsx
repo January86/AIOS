@@ -20,6 +20,7 @@ interface KernelHealth {
   services: ServiceHealth[];
   startedAt?: string;
   checkedAt: string;
+  telegram_configured?: boolean;
 }
 
 interface ProjectHealth {
@@ -52,6 +53,15 @@ interface AIOSEvent {
   payload: Record<string, unknown>;
 }
 
+interface MemoryRecord {
+  id: string;
+  type: string;
+  title: string;
+  importance: number;
+  createdAt: string;
+  scope: string;
+}
+
 interface SystemState {
   kernel: KernelHealth;
   projects: ProjectRecord[];
@@ -77,6 +87,16 @@ function stateColor(state: string): string {
   if (["thinking", "working", "booting", "degraded"].includes(state)) return "#eab308";
   if (["stopped", "offline"].includes(state)) return "#6b7280";
   return "#e2e2f0";
+}
+
+function importanceColor(n: number): string {
+  if (n >= 8) return "#ef4444";
+  if (n >= 6) return "#eab308";
+  return "#22c55e";
+}
+
+function cap(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 function dot(healthy: boolean) {
@@ -130,6 +150,7 @@ function Card({
     >
       <div
         style={{
+          fontFamily: "'Orbitron', sans-serif",
           fontSize: 11,
           fontWeight: 700,
           letterSpacing: "0.08em",
@@ -151,6 +172,7 @@ function Badge({ label, color }: { label: string; color: string }) {
   return (
     <span
       style={{
+        fontFamily: "'Orbitron', sans-serif",
         background: color + "22",
         color,
         border: `1px solid ${color}44`,
@@ -162,29 +184,6 @@ function Badge({ label, color }: { label: string; color: string }) {
     >
       {label}
     </span>
-  );
-}
-
-function KernelCard({ kernel }: { kernel: KernelHealth }) {
-  const uptime = useUptime(kernel.startedAt);
-  const healthyCount = kernel.services.filter((s) => s.healthy).length;
-  return (
-    <Card title="Kernel">
-      <Row label="state">
-        <Badge label={kernel.state} color={stateColor(kernel.state)} />
-      </Row>
-      <Row label="status">
-        <Badge label={kernel.status} color={stateColor(kernel.status)} />
-      </Row>
-      <Row label="services">
-        <span style={{ color: "#e2e2f0" }}>
-          {healthyCount}/{kernel.services.length}
-        </span>
-      </Row>
-      <Row label="uptime">
-        <span style={{ color: "#e2e2f0" }}>{uptime}</span>
-      </Row>
-    </Card>
   );
 }
 
@@ -203,6 +202,29 @@ function Row({
   );
 }
 
+function KernelCard({ kernel }: { kernel: KernelHealth }) {
+  const uptime = useUptime(kernel.startedAt);
+  const healthyCount = kernel.services.filter((s) => s.healthy).length;
+  return (
+    <Card title="Kernel">
+      <Row label="State">
+        <Badge label={cap(kernel.state)} color={stateColor(kernel.state)} />
+      </Row>
+      <Row label="Status">
+        <Badge label={cap(kernel.status)} color={stateColor(kernel.status)} />
+      </Row>
+      <Row label="Services">
+        <span style={{ color: "#e2e2f0" }}>
+          {healthyCount}/{kernel.services.length}
+        </span>
+      </Row>
+      <Row label="Uptime">
+        <span style={{ color: "#e2e2f0" }}>{uptime}</span>
+      </Row>
+    </Card>
+  );
+}
+
 function ProjectsCard({ projects }: { projects: ProjectRecord[] }) {
   return (
     <Card title={`Projects (${projects.length})`}>
@@ -216,7 +238,7 @@ function ProjectsCard({ projects }: { projects: ProjectRecord[] }) {
               {dot(p.health.healthy)}
               {p.config.name}
             </span>
-            <Badge label={p.health.state} color={stateColor(p.health.state)} />
+            <Badge label={cap(p.health.state)} color={stateColor(p.health.state)} />
           </div>
           <div style={{ marginLeft: 18, color: "#4a4a6a", fontSize: 11 }}>
             {p.config.id}
@@ -245,7 +267,60 @@ function AgentsCard({ agents }: { agents: Agent[] }) {
               [{a.role}]
             </span>
           </span>
-          <Badge label={a.state} color={stateColor(a.state)} />
+          <Badge label={cap(a.state)} color={stateColor(a.state)} />
+        </div>
+      ))}
+    </Card>
+  );
+}
+
+function MemoryCard({ records }: { records: MemoryRecord[] }) {
+  return (
+    <Card title="Memory (recent 5)">
+      {records.length === 0 && (
+        <span style={{ color: "#4a4a6a" }}>No memories stored yet</span>
+      )}
+      {records.map((m) => (
+        <div
+          key={m.id}
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <span
+            style={{
+              color: "#4a4a6a",
+              fontSize: 11,
+              flexShrink: 0,
+              width: 70,
+            }}
+          >
+            {cap(m.type)}
+          </span>
+          <span
+            style={{
+              color: "#e2e2f0",
+              fontSize: 12,
+              flex: 1,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {m.title}
+          </span>
+          <span
+            style={{
+              color: importanceColor(m.importance),
+              fontSize: 11,
+              flexShrink: 0,
+            }}
+          >
+            [{m.importance}]
+          </span>
         </div>
       ))}
     </Card>
@@ -292,6 +367,7 @@ function EventRow({ event }: { event: AIOSEvent }) {
 
 export default function CommandCenter() {
   const [system, setSystem] = useState<SystemState | null>(null);
+  const [memories, setMemories] = useState<MemoryRecord[]>([]);
   const [liveEvents, setLiveEvents] = useState<AIOSEvent[]>([]);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -316,6 +392,22 @@ export default function CommandCenter() {
     return () => clearInterval(id);
   }, []);
 
+  // Poll memory every 10 s
+  useEffect(() => {
+    const fetchMemory = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/memory?limit=5`);
+        const body = await res.json() as { ok: boolean; data: MemoryRecord[] };
+        if (body.ok) setMemories(body.data);
+      } catch {
+        // silent — memory is non-critical
+      }
+    };
+    void fetchMemory();
+    const id = setInterval(() => void fetchMemory(), 10_000);
+    return () => clearInterval(id);
+  }, []);
+
   // SSE live event feed
   useEffect(() => {
     const es = new EventSource(`${API_BASE}/api/events/stream`);
@@ -334,6 +426,7 @@ export default function CommandCenter() {
   }, []);
 
   const displayEvents = liveEvents.length > 0 ? liveEvents : (system?.recentEvents ?? []);
+  const telegramConfigured = system?.kernel.telegram_configured ?? false;
 
   return (
     <div
@@ -355,15 +448,38 @@ export default function CommandCenter() {
           background: "#12121a",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: "0.06em" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontFamily: "'Orbitron', sans-serif", fontSize: 16, fontWeight: 700, letterSpacing: "0.06em" }}>
             AIOS COMMAND CENTER
           </span>
-          <span style={{ color: "#4a4a6a", fontSize: 12 }}>v1.9.0</span>
-        </div>
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <span
             style={{
+              fontFamily: "'Orbitron', sans-serif",
+              background: "#a855f722",
+              color: "#a855f7",
+              border: "1px solid #a855f744",
+              borderRadius: 4,
+              padding: "1px 7px",
+              fontSize: 11,
+              fontWeight: 700,
+            }}
+          >
+            v2.0.0 ALPHA
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <span
+            style={{
+              fontFamily: "'Orbitron', sans-serif",
+              fontSize: 11,
+              color: telegramConfigured ? "#22c55e" : "#4a4a6a",
+            }}
+          >
+            🔔 TELEGRAM
+          </span>
+          <span
+            style={{
+              fontFamily: "'Orbitron', sans-serif",
               fontSize: 11,
               color: connected ? "#22c55e" : "#ef4444",
               display: "flex",
@@ -412,10 +528,19 @@ export default function CommandCenter() {
           <AgentsCard agents={system?.agents ?? []} />
         </div>
 
+        {/* Memory section */}
+        <MemoryCard records={memories} />
+
         {/* Services row */}
         {system && (
           <Card title={`Services (${system.kernel.services.length})`}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 6 }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+                gap: 6,
+              }}
+            >
               {system.kernel.services.map((s) => (
                 <div
                   key={s.name}

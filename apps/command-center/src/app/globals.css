@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -20,8 +22,7 @@ html,
 body {
   background-color: var(--bg);
   color: var(--text);
-  font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", ui-monospace,
-    SFMono-Regular, Menlo, monospace;
+  font-family: 'Share Tech Mono', monospace;
   font-size: 13px;
   line-height: 1.5;
 }

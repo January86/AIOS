@@ -11,6 +11,7 @@ import type {
 import type { InMemoryEventBus } from "../../../events/src/index.js";
 import type { MemoryEngine } from "../../../memory/src/index.js";
 import type { PolicyEngine } from "../../../policy/src/index.js";
+import type { TelegramNotifier } from "../telegram/telegram-notifier.js";
 import { BaseAgent } from "./base-agent.js";
 
 const NOVA_DEFINITION: AgentDefinition = {
@@ -19,7 +20,7 @@ const NOVA_DEFINITION: AgentDefinition = {
   role: AgentRole.REPORTER,
   department: "Report Department",
   autonomyLevel: 0,
-  capabilities: ["summarize", "format-report", "send-telegram-placeholder"],
+  capabilities: ["summarize", "format-report", "telegram-alert"],
   description: "Generates and sends operational reports to founder",
 };
 
@@ -27,7 +28,8 @@ export class ReporterAgent extends BaseAgent {
   constructor(
     eventBus: InMemoryEventBus,
     policyEngine: PolicyEngine,
-    memoryEngine: MemoryEngine
+    memoryEngine: MemoryEngine,
+    private readonly notifier?: TelegramNotifier
   ) {
     super(NOVA_DEFINITION, eventBus, policyEngine, memoryEngine);
   }
@@ -52,6 +54,13 @@ export class ReporterAgent extends BaseAgent {
     const summary = lines.join("\n");
 
     console.log(`\n[REPORT]\n${summary}`);
+
+    if (this.notifier?.isConfigured()) {
+      await this.notifier.sendAlert("AIOS Status Report", summary, "📊");
+      console.log("[NOVA] Telegram alert sent");
+    } else {
+      console.log("[NOVA] Telegram not configured");
+    }
 
     const memoryStored = await this.storeMemory({
       type: MemoryType.EPISODIC,

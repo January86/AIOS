@@ -2,29 +2,24 @@ module.exports = {
   apps: [
     {
       name: "aios-api",
-      script: "tsx",
+      script: "./node_modules/.bin/tsx",
       args: "services/api/src/index.ts",
       cwd: "/home/administrator/projects/aios",
-      interpreter: "none",
-      env: {
-        NODE_ENV: "production",
-      },
       watch: false,
-      autorestart: true,
-      max_memory_restart: "512M",
+      env: {
+        NODE_ENV: "development",
+      },
     },
     {
       name: "aios-ui",
       script: "npm",
       args: "run dev",
       cwd: "/home/administrator/projects/aios/apps/command-center",
-      interpreter: "none",
+      watch: false,
       env: {
         NODE_ENV: "development",
         PORT: "3334",
       },
-      watch: false,
-      autorestart: true,
     },
   ],
 };
