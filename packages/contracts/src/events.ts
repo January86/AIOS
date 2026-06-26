@@ -33,9 +33,15 @@ export enum EventType {
   AGENT_SPAWNED = "agent.spawned",
   AGENT_COMPLETED = "agent.completed",
   AGENT_FAILED = "agent.failed",
-  // Policy (future)
+  // Policy
   POLICY_EVALUATED = "policy.evaluated",
   POLICY_VIOLATED = "policy.violated",
+  POLICY_REQUEST_CREATED = "policy.request.created",
+  POLICY_DECISION_MADE = "policy.decision.made",
+  POLICY_ACTION_ALLOWED = "policy.action.allowed",
+  POLICY_ACTION_DENIED = "policy.action.denied",
+  POLICY_ACTION_ESCALATED = "policy.action.escalated",
+  POLICY_AUDIT_LOGGED = "policy.audit.logged",
   // Memory (future)
   MEMORY_STORED = "memory.stored",
   MEMORY_RETRIEVED = "memory.retrieved",
