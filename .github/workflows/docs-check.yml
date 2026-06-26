@@ -1,0 +1,14 @@
+name: Docs Check
+
+on:
+  pull_request:
+  push:
+    branches: [ main, develop ]
+
+jobs:
+  docs-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: List markdown files
+        run: find . -name "*.md" | sort
