@@ -2,27 +2,27 @@ import { ProjectTier } from "../../contracts/src/index.js";
 import { InMemoryEventBus } from "../../events/src/index.js";
 import { ProjectRegistry } from "../../project-runtime/src/index.js";
 import { AIOSKernel } from "./kernel.js";
+import { MonitoringWorker } from "./monitoring/index.js";
 import { MockService } from "./services/mock-service.js";
 
 const eventBus = new InMemoryEventBus();
 
-// Demo: wildcard subscriber — receives every event the bus publishes.
-const unsubscribe = eventBus.subscribe("*", (_event) => {
-  // wildcard handler registered — demonstrates subscribe() and UnsubscribeFn
-});
+// Wildcard subscriber — demonstrates subscribe() API.
+const unsubscribe = eventBus.subscribe("*", (_event) => {});
 
 const kernel = new AIOSKernel(eventBus);
 const projectRegistry = new ProjectRegistry(eventBus);
+const monitoringWorker = new MonitoringWorker(eventBus, projectRegistry, 5_000);
 
 kernel.registerService(new MockService("event-bus"));
 kernel.registerService(new MockService("configuration"));
 kernel.registerService(projectRegistry);
-kernel.registerService(new MockService("monitoring"));
+kernel.registerService(monitoringWorker);
 
 console.log("[AIOS] Booting kernel...");
 await kernel.boot();
 
-// Demonstrate the event store: print first 5 events captured during boot
+// Event store snapshot after boot
 const bootEvents = eventBus.getEvents({ limit: 5 });
 const totalStored = eventBus.getEvents().length;
 console.log(`\n[AIOS] First 5 of ${totalStored} stored events:`);
@@ -30,10 +30,9 @@ for (const e of bootEvents) {
   console.log(`  ${e.type} [${e.correlationId}]`);
 }
 
-// Unsubscribe the demo handler before continuing
 unsubscribe();
 
-// --- Project Registry demo ---
+// --- Project Registry ---
 const now = new Date().toISOString();
 
 projectRegistry.registerProject({
@@ -66,11 +65,18 @@ for (const p of projects) {
   console.log(`  ${p.config.id} | ${p.config.name} | tier=${p.config.tier} | state=${p.health.state}`);
 }
 
-const haPlatform = projectRegistry.getProject("ha-platform");
-console.log("\n[AIOS] Project detail — ha-platform:");
-console.log(JSON.stringify(haPlatform, null, 2));
+// --- Monitoring: immediate check cycle ---
+console.log("\n[AIOS] Running initial health check cycle...");
+await monitoringWorker.runChecks();
 
-// --- Health check ---
+console.log("\n[AIOS] Project health after check:");
+for (const p of projectRegistry.listProjects()) {
+  const { id, name } = p.config;
+  const { state, healthy, errorMessage } = p.health;
+  console.log(`  ${id} | ${name} | healthy=${healthy} | state=${state}${errorMessage ? ` | ${errorMessage}` : ""}`);
+}
+
+// --- Kernel health ---
 const health = await kernel.healthCheck();
 console.log("\n[AIOS] Health Report:");
 console.log(JSON.stringify(health, null, 2));

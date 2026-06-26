@@ -23,6 +23,12 @@ export enum EventType {
   PROJECT_UNREGISTERED = "project.unregistered",
   PROJECT_HEALTH_UPDATED = "project.health.updated",
   PROJECT_STATE_CHANGED = "project.state.changed",
+  // Monitoring
+  MONITORING_CHECK_STARTED = "monitoring.check.started",
+  MONITORING_CHECK_COMPLETED = "monitoring.check.completed",
+  MONITORING_PROJECT_DOWN = "monitoring.project.down",
+  MONITORING_PROJECT_RECOVERED = "monitoring.project.recovered",
+  MONITORING_PROJECT_DEGRADED = "monitoring.project.degraded",
   // Agent (future)
   AGENT_SPAWNED = "agent.spawned",
   AGENT_COMPLETED = "agent.completed",
