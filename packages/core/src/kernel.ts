@@ -1,56 +1,89 @@
-import { createEvent, type KernelService, type KernelState, type ServiceHealth } from "../../contracts/src/index.js";
-import { InMemoryEventBus } from "../../events/src/index.js";
+import { createEvent, KernelState } from "../../contracts/src/index.js";
+import type { KernelService, ServiceHealth } from "../../contracts/src/index.js";
+import type { InMemoryEventBus } from "../../events/src/index.js";
+import { ServiceRegistry } from "./service-registry.js";
 
-export interface KernelHealth {
+export type KernelHealthStatus = "healthy" | "degraded" | "critical";
+
+export interface KernelHealthReport {
+  status: KernelHealthStatus;
   state: KernelState;
   services: ServiceHealth[];
   startedAt?: string;
   lastError?: string;
+  checkedAt: string;
 }
 
 export class AIOSKernel {
-  private state: KernelState = "created";
+  private state: KernelState = KernelState.IDLE;
   private startedAt?: string;
-  private services: KernelService[] = [];
+  private lastError?: string;
+  readonly registry: ServiceRegistry;
 
-  constructor(private readonly eventBus: InMemoryEventBus) {}
+  constructor(private readonly eventBus: InMemoryEventBus) {
+    this.registry = new ServiceRegistry(eventBus);
+  }
 
   registerService(service: KernelService): void {
-    this.services.push(service);
+    this.registry.registerService(service);
   }
 
   getState(): KernelState {
     return this.state;
   }
 
+  private log(msg: string): void {
+    console.log(`[${new Date().toISOString()}] [kernel] ${msg}`);
+  }
+
+  private async transition(to: KernelState): Promise<void> {
+    const from = this.state;
+    this.state = to;
+    this.log(`state: ${from} → ${to}`);
+  }
+
   async boot(): Promise<void> {
-    this.state = "booting";
-    await this.eventBus.publish(createEvent({ type: "kernel.boot.started", source: "kernel" }));
+    if (this.state !== KernelState.IDLE && this.state !== KernelState.STOPPED) {
+      throw new Error(`Cannot boot from state: ${this.state}`);
+    }
+
+    await this.transition(KernelState.BOOTING);
+    await this.eventBus.publish(
+      createEvent({ type: "kernel.boot.started", source: "kernel", payload: { state: this.state } })
+    );
 
     try {
-      for (const service of this.services) {
+      for (const service of this.registry.listServices()) {
         await service.init();
         await service.start();
+        this.registry.markStarted(service.name);
         await this.eventBus.publish(
           createEvent({
             type: "kernel.service.started",
             source: "kernel",
-            payload: { service: service.name },
+            payload: { name: service.name },
           })
         );
       }
 
       this.startedAt = new Date().toISOString();
-      this.state = "running";
-      await this.eventBus.publish(createEvent({ type: "kernel.boot.completed", source: "kernel" }));
-    } catch (error) {
-      this.state = "failed";
+      await this.transition(KernelState.RUNNING);
       await this.eventBus.publish(
         createEvent({
-          type: "kernel.boot.failed",
+          type: "kernel.boot.completed",
+          source: "kernel",
+          payload: { startedAt: this.startedAt },
+        })
+      );
+    } catch (error) {
+      this.lastError = error instanceof Error ? error.message : String(error);
+      await this.transition(KernelState.ERROR);
+      await this.eventBus.publish(
+        createEvent({
+          type: "kernel.error.occurred",
           source: "kernel",
           severity: "critical",
-          payload: { error: error instanceof Error ? error.message : String(error) },
+          payload: { error: this.lastError },
         })
       );
       throw error;
@@ -58,23 +91,93 @@ export class AIOSKernel {
   }
 
   async shutdown(reason = "manual"): Promise<void> {
-    this.state = "shutting_down";
-    await this.eventBus.publish(createEvent({ type: "kernel.shutdown.started", source: "kernel", payload: { reason } }));
+    if (this.state === KernelState.STOPPED || this.state === KernelState.SHUTTING_DOWN) {
+      return;
+    }
 
-    for (const service of [...this.services].reverse()) {
+    await this.transition(KernelState.SHUTTING_DOWN);
+    await this.eventBus.publish(
+      createEvent({
+        type: "kernel.shutdown.started",
+        source: "kernel",
+        payload: { reason },
+      })
+    );
+
+    for (const service of [...this.registry.listServices()].reverse()) {
       await service.stop();
     }
 
-    this.state = "stopped";
-    await this.eventBus.publish(createEvent({ type: "kernel.shutdown.completed", source: "kernel" }));
+    await this.transition(KernelState.STOPPED);
+    await this.eventBus.publish(
+      createEvent({ type: "kernel.shutdown.completed", source: "kernel" })
+    );
   }
 
-  async health(): Promise<KernelHealth> {
-    const services = await Promise.all(this.services.map((service) => service.health()));
-    return {
+  async recover(): Promise<void> {
+    if (this.state !== KernelState.ERROR) {
+      throw new Error(`Cannot recover from state: ${this.state}`);
+    }
+
+    await this.eventBus.publish(
+      createEvent({ type: "kernel.recovery.started", source: "kernel" })
+    );
+
+    this.lastError = undefined;
+    await this.transition(KernelState.IDLE);
+    await this.boot();
+
+    await this.eventBus.publish(
+      createEvent({ type: "kernel.recovery.completed", source: "kernel" })
+    );
+  }
+
+  async healthCheck(): Promise<KernelHealthReport> {
+    const services = await this.registry.healthAll();
+    const anyUnhealthy = services.some((s) => !s.healthy);
+
+    let status: KernelHealthStatus;
+    if (this.state === KernelState.ERROR) {
+      status = "critical";
+    } else if (anyUnhealthy) {
+      status = "degraded";
+    } else {
+      status = "healthy";
+    }
+
+    const report: KernelHealthReport = {
+      status,
       state: this.state,
       services,
       startedAt: this.startedAt,
+      lastError: this.lastError,
+      checkedAt: new Date().toISOString(),
     };
+
+    await this.eventBus.publish(
+      createEvent({
+        type: "kernel.health.checked",
+        source: "kernel",
+        payload: { status, serviceCount: services.length },
+      })
+    );
+
+    return report;
+  }
+
+  // Blocks until SIGINT or SIGTERM, then shuts down gracefully.
+  run(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      // Keep the event loop alive until a signal is received.
+      const keepAlive = setInterval(() => {}, 1_000);
+
+      const handle = (signal: string) => {
+        clearInterval(keepAlive);
+        this.log(`received ${signal}, initiating graceful shutdown`);
+        void this.shutdown(signal).then(resolve);
+      };
+      process.once("SIGINT", () => handle("SIGINT"));
+      process.once("SIGTERM", () => handle("SIGTERM"));
+    });
   }
 }

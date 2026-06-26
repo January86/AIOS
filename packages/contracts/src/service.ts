@@ -5,6 +5,7 @@ export interface ServiceHealth {
   state: ServiceState;
   healthy: boolean;
   message?: string;
+  startedAt?: string;
   checkedAt: string;
 }
 

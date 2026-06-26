@@ -15,11 +15,14 @@ kernel.registerService(new MockService("configuration"));
 kernel.registerService(new MockService("project-registry"));
 kernel.registerService(new MockService("monitoring"));
 
-console.log("AIOS Kernel Booting...");
-
+console.log("[AIOS] Booting kernel...");
 await kernel.boot();
 
-const health = await kernel.health();
-
-console.log("AIOS Ready");
+const health = await kernel.healthCheck();
+console.log("\n[AIOS] Health Report:");
 console.log(JSON.stringify(health, null, 2));
+
+console.log("\n[AIOS] Kernel running. Press Ctrl+C to shutdown.\n");
+await kernel.run();
+
+process.exit(0);
