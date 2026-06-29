@@ -15,9 +15,14 @@ import type { MemoryEngine } from "../../../memory/src/index.js";
 import type { PolicyEngine } from "../../../policy/src/index.js";
 import type { ModelRouter } from "../model-router/index.js";
 import type { TelegramNotifier } from "../telegram/telegram-notifier.js";
+import { ApexAgent } from "./apex-agent.js";
+import { AxelAgent } from "./axel-agent.js";
 import { BaseAgent } from "./base-agent.js";
 import { MonitoringAgent } from "./monitoring-agent.js";
 import { ReporterAgent } from "./reporter-agent.js";
+import { RexAgent } from "./rex-agent.js";
+import { SageAgent } from "./sage-agent.js";
+import { VeraAgent } from "./vera-agent.js";
 
 export class AgentRuntime implements KernelService {
   readonly name = "agent-runtime";
@@ -25,6 +30,13 @@ export class AgentRuntime implements KernelService {
   private startedAt?: string;
   private readonly agents = new Map<string, BaseAgent>();
   private taskInProgress = false;
+
+  // Named references for typed getters
+  private _apex?: ApexAgent;
+  private _sage?: SageAgent;
+  private _rex?: RexAgent;
+  private _vera?: VeraAgent;
+  private _axel?: AxelAgent;
 
   constructor(
     private readonly eventBus: InMemoryEventBus,
@@ -57,6 +69,42 @@ export class AgentRuntime implements KernelService {
       this.modelRouter
     );
 
+    this._apex = new ApexAgent(
+      this.eventBus,
+      this.policyEngine,
+      this.memoryEngine,
+      this.modelRouter
+    );
+    this._sage = new SageAgent(
+      this.eventBus,
+      this.policyEngine,
+      this.memoryEngine,
+      this.modelRouter
+    );
+    this._rex = new RexAgent(
+      this.eventBus,
+      this.policyEngine,
+      this.memoryEngine,
+      this.modelRouter
+    );
+    this._vera = new VeraAgent(
+      this.eventBus,
+      this.policyEngine,
+      this.memoryEngine,
+      this.modelRouter
+    );
+    this._axel = new AxelAgent(
+      this.eventBus,
+      this.policyEngine,
+      this.memoryEngine,
+      this.modelRouter
+    );
+
+    this.registerAgent(this._apex);
+    this.registerAgent(this._sage);
+    this.registerAgent(this._rex);
+    this.registerAgent(this._vera);
+    this.registerAgent(this._axel);
     this.registerAgent(aria);
     this.registerAgent(nova);
 
@@ -70,6 +118,9 @@ export class AgentRuntime implements KernelService {
 
     console.log(
       `[${new Date().toISOString()}] [agent-runtime] started with ${this.agents.size} agents`
+    );
+    console.log(
+      "[AIOS] Agent team ready: Apex, Sage, Rex, Vera, Axel, Aria, Nova"
     );
   }
 
@@ -112,6 +163,31 @@ export class AgentRuntime implements KernelService {
 
   getAgent(id: string): BaseAgent | undefined {
     return this.agents.get(id);
+  }
+
+  getApex(): ApexAgent {
+    if (!this._apex) throw new Error("AgentRuntime not started");
+    return this._apex;
+  }
+
+  getSage(): SageAgent {
+    if (!this._sage) throw new Error("AgentRuntime not started");
+    return this._sage;
+  }
+
+  getRex(): RexAgent {
+    if (!this._rex) throw new Error("AgentRuntime not started");
+    return this._rex;
+  }
+
+  getVera(): VeraAgent {
+    if (!this._vera) throw new Error("AgentRuntime not started");
+    return this._vera;
+  }
+
+  getAxel(): AxelAgent {
+    if (!this._axel) throw new Error("AgentRuntime not started");
+    return this._axel;
   }
 
   listAgents(): { id: string; name: string; role: string; state: AgentState }[] {

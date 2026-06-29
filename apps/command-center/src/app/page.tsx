@@ -543,6 +543,21 @@ function ProjectsCard({ projects }: { projects: ProjectRecord[] }) {
   );
 }
 
+// ── Agent role color coding ───────────────────────────────────────────────────
+
+function roleColor(role: string): string {
+  switch (role) {
+    case "ceo": return "#f59e0b";
+    case "developer": return "#3b82f6";
+    case "qa": return "#a855f7";
+    case "devops": return "#f97316";
+    case "research": return "#14b8a6";
+    case "monitoring": return "#22c55e";
+    case "reporter": return "#06b6d4";
+    default: return "#6b7280";
+  }
+}
+
 // ── AgentsCard ────────────────────────────────────────────────────────────────
 
 function AgentsCard({ agents }: { agents: Agent[] }) {
@@ -553,10 +568,22 @@ function AgentsCard({ agents }: { agents: Agent[] }) {
       )}
       {agents.map((a) => (
         <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ color: "#e2e2f0" }}>
-            {a.name}
-            <span style={{ color: "#4a4a6a", marginLeft: 6, fontSize: 11 }}>
-              [{a.role}]
+          <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                background: roleColor(a.role),
+                flexShrink: 0,
+                display: "inline-block",
+              }}
+            />
+            <span style={{ color: "#e2e2f0" }}>
+              {a.name}
+              <span style={{ color: roleColor(a.role), marginLeft: 6, fontSize: 11, opacity: 0.8 }}>
+                [{a.role}]
+              </span>
             </span>
           </span>
           <Badge label={cap(a.state)} color={stateColor(a.state)} />
@@ -962,7 +989,7 @@ export default function CommandCenter() {
               fontWeight: 700,
             }}
           >
-            v2.2.0 ALPHA
+            v2.4.0 ALPHA
           </span>
         </div>
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>

@@ -184,13 +184,13 @@ const httpServer = app.listen(PORT, () => {
 // ── Startup Telegram alert ────────────────────────────────────────────────────
 
 void notifier.sendAlert(
-  "AIOS v2.3.0 Online",
+  "AIOS v2.4.0 Online",
   [
-    "🚀 AIOS v2.3.0 online",
+    "🚀 AIOS v2.4.0 online",
     "Kernel: healthy",
     "Services: 8",
     "Projects: 3",
-    "Agents: Aria, Nova",
+    "Agents: Apex, Sage, Rex, Vera, Axel, Aria, Nova (7 total)",
     `Model Router: OpenRouter ${modelRouter.isConfigured() ? "✓" : "✗"}`,
     `Goal Channel: ${goalListener ? "active ✓" : "inactive"}`,
   ].join("\n"),

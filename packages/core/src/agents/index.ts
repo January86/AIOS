@@ -1,4 +1,9 @@
 export { AgentRuntime } from "./agent-runtime.js";
+export { ApexAgent } from "./apex-agent.js";
+export { AxelAgent } from "./axel-agent.js";
 export { BaseAgent } from "./base-agent.js";
 export { MonitoringAgent } from "./monitoring-agent.js";
 export { ReporterAgent } from "./reporter-agent.js";
+export { RexAgent } from "./rex-agent.js";
+export { SageAgent } from "./sage-agent.js";
+export { VeraAgent } from "./vera-agent.js";
