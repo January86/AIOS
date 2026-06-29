@@ -16,6 +16,7 @@ import type {
 import type { InMemoryEventBus } from "../../../events/src/index.js";
 import type { MemoryEngine } from "../../../memory/src/index.js";
 import type { PolicyEngine } from "../../../policy/src/index.js";
+import type { ModelRouter } from "../model-router/index.js";
 
 export abstract class BaseAgent {
   private _state: AgentState = AgentState.IDLE;
@@ -25,7 +26,8 @@ export abstract class BaseAgent {
     public readonly definition: AgentDefinition,
     protected readonly eventBus: InMemoryEventBus,
     protected readonly policyEngine: PolicyEngine,
-    protected readonly memoryEngine: MemoryEngine
+    protected readonly memoryEngine: MemoryEngine,
+    protected readonly modelRouter?: ModelRouter
   ) {}
 
   get state(): AgentState {
@@ -146,6 +148,38 @@ export abstract class BaseAgent {
   }
 
   protected abstract execute(task: AgentTask): Promise<AgentReport>;
+
+  protected buildSystemPrompt(): string {
+    const caps = this.definition.capabilities.join(", ");
+    return [
+      `You are ${this.definition.name}, an AI agent in the AIOS autonomous system.`,
+      `Role: ${this.definition.role}`,
+      `Department: ${this.definition.department}`,
+      `Capabilities: ${caps}`,
+      "",
+      "Core rules:",
+      "- Never fabricate data. If you don't know, say so.",
+      "- Always include a confidence score (0.0–1.0) in your analysis.",
+      "- Never execute destructive actions without approval for autonomy level 2+.",
+      "- Always recall relevant memory context before starting a task.",
+      "- Be concise, accurate, and actionable.",
+    ].join("\n");
+  }
+
+  protected async think(prompt: string, systemPrompt?: string): Promise<string> {
+    if (!this.modelRouter?.isConfigured()) {
+      return "[LLM not configured]";
+    }
+    try {
+      return await this.modelRouter.complete(
+        this.definition.role,
+        [{ role: "user", content: prompt }],
+        { systemPrompt: systemPrompt ?? this.buildSystemPrompt() }
+      );
+    } catch (error) {
+      return `[LLM error: ${error instanceof Error ? error.message : String(error)}]`;
+    }
+  }
 
   protected async storeMemory(input: CreateMemoryInput): Promise<boolean> {
     try {

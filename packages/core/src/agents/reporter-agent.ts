@@ -11,6 +11,7 @@ import type {
 import type { InMemoryEventBus } from "../../../events/src/index.js";
 import type { MemoryEngine } from "../../../memory/src/index.js";
 import type { PolicyEngine } from "../../../policy/src/index.js";
+import type { ModelRouter } from "../model-router/index.js";
 import type { TelegramNotifier } from "../telegram/telegram-notifier.js";
 import { BaseAgent } from "./base-agent.js";
 
@@ -29,12 +30,54 @@ export class ReporterAgent extends BaseAgent {
     eventBus: InMemoryEventBus,
     policyEngine: PolicyEngine,
     memoryEngine: MemoryEngine,
-    private readonly notifier?: TelegramNotifier
+    private readonly notifier?: TelegramNotifier,
+    modelRouter?: ModelRouter
   ) {
-    super(NOVA_DEFINITION, eventBus, policyEngine, memoryEngine);
+    super(NOVA_DEFINITION, eventBus, policyEngine, memoryEngine, modelRouter);
   }
 
   protected async execute(task: AgentTask): Promise<AgentReport> {
+    if ("goalText" in task.input) {
+      return this.executeGoalAck(task);
+    }
+    return this.executeReport(task);
+  }
+
+  private async executeGoalAck(task: AgentTask): Promise<AgentReport> {
+    const goalText = task.input["goalText"] as string;
+    const fromUser = task.input["fromUser"] as string;
+    const receivedAt = task.input["receivedAt"] as string;
+
+    const prompt = [
+      `A new goal has been submitted to AIOS. Generate a brief acknowledgment summary.`,
+      ``,
+      `Goal: ${goalText}`,
+      `From: ${fromUser}`,
+      `Received at: ${receivedAt}`,
+      ``,
+      `Respond with exactly one sentence starting with "Goal received:" summarizing what the goal is about, then append " Will be processed by Apex in v2.5.0." Keep the total response under 2 sentences.`,
+    ].join("\n");
+
+    const llmResponse = await this.think(prompt);
+    const summary = llmResponse.startsWith("[LLM")
+      ? `Goal received: ${goalText.slice(0, 80)}. Will be processed by Apex in v2.5.0.`
+      : llmResponse;
+
+    console.log(`[NOVA] goal ack for ${fromUser}: ${summary.slice(0, 80)}`);
+
+    return {
+      taskId: task.id,
+      agentId: this.definition.id,
+      agentName: this.definition.name,
+      summary,
+      findings: [`Goal from ${fromUser}: ${goalText}`],
+      recommendations: ["Apex will decompose in v2.5.0"],
+      memoryStored: false,
+      completedAt: new Date().toISOString(),
+    };
+  }
+
+  private async executeReport(task: AgentTask): Promise<AgentReport> {
     const reports = task.input["reports"] as AgentReport[];
 
     const total = reports.length;
@@ -44,14 +87,38 @@ export class ReporterAgent extends BaseAgent {
     const healthy = total - failures;
 
     const timestamp = new Date().toISOString();
-    const lines = [
-      `AIOS Status Report — ${timestamp}`,
-      `  Projects monitored: ${total}`,
-      `  Healthy: ${healthy}`,
-      `  Issues: ${failures}`,
-      ...reports.map((r) => `  • ${r.summary}`),
-    ];
-    const summary = lines.join("\n");
+
+    // Try LLM narrative summary
+    let summary: string;
+    const llmPrompt = [
+      `Generate a concise, friendly Telegram message summarizing this AIOS operational status.`,
+      ``,
+      `Timestamp: ${timestamp}`,
+      `Projects monitored: ${total}`,
+      `Healthy: ${healthy}`,
+      `Issues: ${failures}`,
+      ``,
+      `Project details:`,
+      ...reports.map((r) => `• ${r.summary}`),
+      ``,
+      `Requirements: friendly tone, specific project names, actionable next steps if issues exist, under 250 words, emojis welcome.`,
+    ].join("\n");
+
+    const llmResponse = await this.think(llmPrompt, this.buildSystemPrompt());
+
+    if (llmResponse.startsWith("[LLM")) {
+      // Fallback to structured format
+      const lines = [
+        `AIOS Status Report — ${timestamp}`,
+        `  Projects monitored: ${total}`,
+        `  Healthy: ${healthy}`,
+        `  Issues: ${failures}`,
+        ...reports.map((r) => `  • ${r.summary}`),
+      ];
+      summary = lines.join("\n");
+    } else {
+      summary = llmResponse;
+    }
 
     console.log(`\n[REPORT]\n${summary}`);
 

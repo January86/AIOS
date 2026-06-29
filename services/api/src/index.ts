@@ -9,7 +9,12 @@ import { AIOSKernel } from "../../../packages/core/src/kernel.js";
 import { AgentRuntime } from "../../../packages/core/src/agents/index.js";
 import { MonitoringWorker } from "../../../packages/core/src/monitoring/index.js";
 import { MockService } from "../../../packages/core/src/services/mock-service.js";
-import { TelegramNotifier } from "../../../packages/core/src/telegram/index.js";
+import {
+  TelegramNotifier,
+  TelegramGoalListener,
+  GoalIntake,
+} from "../../../packages/core/src/telegram/index.js";
+import { ModelRouter } from "../../../packages/core/src/model-router/index.js";
 import { BaronMonitor } from "../../../packages/core/src/baron/index.js";
 import { DailyReporter } from "../../../packages/core/src/scheduler/index.js";
 import { ProjectTier } from "../../../packages/contracts/src/index.js";
@@ -18,6 +23,10 @@ import { createServer } from "./server.js";
 // ── Telegram ──────────────────────────────────────────────────────────────────
 
 const notifier = new TelegramNotifier();
+
+// ── Model Router ──────────────────────────────────────────────────────────────
+
+const modelRouter = new ModelRouter();
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 
@@ -32,7 +41,13 @@ const prisma = new PrismaClient({ adapter });
 const memoryStore = new MemoryStore(prisma);
 const memoryEngine = new MemoryEngine(memoryStore, eventBus);
 
-const agentRuntime = new AgentRuntime(eventBus, policyEngine, memoryEngine, notifier);
+const agentRuntime = new AgentRuntime(
+  eventBus,
+  policyEngine,
+  memoryEngine,
+  notifier,
+  modelRouter
+);
 const baronMonitor = new BaronMonitor(eventBus, notifier);
 
 kernel.registerService(new MockService("event-bus"));
@@ -84,8 +99,6 @@ projectRegistry.registerProject({
   name: "Executive Brief (Ensiklomedia)",
   description: "AI-powered daily news briefing for government institutions in NTB",
   tier: ProjectTier.STANDARD,
-  // Sentinel directory on AIOS VPS — create with: mkdir -p /home/administrator/aios-sentinels/executive-brief
-  // Actual project lives on separate VPS; filesystem check = project is registered/assumed healthy
   path: "/home/administrator/aios-sentinels/executive-brief",
   tags: ["production", "news", "government", "nlp"],
   createdAt: now,
@@ -111,6 +124,32 @@ agentRuntime.subscribeToMonitoring();
 
 const dailyReporter = new DailyReporter(agentRuntime, eventBus, notifier, projectRegistry);
 dailyReporter.start();
+
+// ── Telegram Goal Listener ────────────────────────────────────────────────────
+
+const GOAL_CHAT_ID = process.env["TELEGRAM_GOAL_CHAT_ID"] ?? "";
+const BOT_TOKEN = process.env["TELEGRAM_BOT_TOKEN"] ?? "";
+
+let goalListener: TelegramGoalListener | null = null;
+
+if (GOAL_CHAT_ID && BOT_TOKEN) {
+  try {
+    goalListener = new TelegramGoalListener(BOT_TOKEN, GOAL_CHAT_ID, () => {
+      // placeholder — GoalIntake overwrites this callback in its constructor
+    });
+    // GoalIntake wires itself to goalListener and overwrites the onGoal callback
+    new GoalIntake(goalListener, notifier, agentRuntime, memoryEngine);
+    goalListener.start();
+    console.log(`[AIOS] Goal listener active on chat ${GOAL_CHAT_ID}`);
+  } catch (error) {
+    console.error(
+      "[AIOS] Goal listener failed to start:",
+      error instanceof Error ? error.message : String(error)
+    );
+  }
+} else {
+  console.warn("[AIOS] Goal listener not started: TELEGRAM_GOAL_CHAT_ID or TELEGRAM_BOT_TOKEN missing");
+}
 
 // ── Start Express ─────────────────────────────────────────────────────────────
 
@@ -139,13 +178,22 @@ const httpServer = app.listen(PORT, () => {
   console.log(`[API]   GET  http://localhost:${PORT}/api/baron/summary`);
   console.log(`[API]   POST http://localhost:${PORT}/api/policy/evaluate`);
   console.log(`[API] Telegram: ${notifier.isConfigured() ? "configured ✓" : "not configured"}`);
+  console.log(`[API] ModelRouter: ${modelRouter.isConfigured() ? "OpenRouter ✓" : "not configured"}`);
 });
 
 // ── Startup Telegram alert ────────────────────────────────────────────────────
 
 void notifier.sendAlert(
-  "AIOS Online",
-  "AIOS Alpha v2.1.0 is running\nProjects monitored: 3\nHa-Platform, Executive Brief, Baron Trading\nAgents: Aria, Nova\nBaron monitor: active",
+  "AIOS v2.3.0 Online",
+  [
+    "🚀 AIOS v2.3.0 online",
+    "Kernel: healthy",
+    "Services: 8",
+    "Projects: 3",
+    "Agents: Aria, Nova",
+    `Model Router: OpenRouter ${modelRouter.isConfigured() ? "✓" : "✗"}`,
+    `Goal Channel: ${goalListener ? "active ✓" : "inactive"}`,
+  ].join("\n"),
   "🚀"
 );
 
@@ -153,6 +201,7 @@ void notifier.sendAlert(
 
 const shutdown = async (signal: string) => {
   console.log(`\n[API] Received ${signal}, shutting down...`);
+  goalListener?.stop();
   dailyReporter.stop();
   httpServer.close();
   await kernel.shutdown(signal);

@@ -62,6 +62,10 @@ export enum EventType {
   BARON_BALANCE_UPDATED = "baron.balance.updated",
   BARON_CIRCUIT_TRIGGERED = "baron.circuit.triggered",
   BARON_PROFIT_TARGET_REACHED = "baron.profit.target.reached",
+  // Model Router
+  MODEL_ROUTER_CALLED = "model.router.called",
+  MODEL_ROUTER_FALLBACK = "model.router.fallback",
+  MODEL_ROUTER_FAILED = "model.router.failed",
 }
 
 export function createCorrelationId(): string {

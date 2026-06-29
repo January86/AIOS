@@ -13,6 +13,7 @@ import type {
 import type { InMemoryEventBus } from "../../../events/src/index.js";
 import type { MemoryEngine } from "../../../memory/src/index.js";
 import type { PolicyEngine } from "../../../policy/src/index.js";
+import type { ModelRouter } from "../model-router/index.js";
 import type { TelegramNotifier } from "../telegram/telegram-notifier.js";
 import { BaseAgent } from "./base-agent.js";
 import { MonitoringAgent } from "./monitoring-agent.js";
@@ -29,7 +30,8 @@ export class AgentRuntime implements KernelService {
     private readonly eventBus: InMemoryEventBus,
     private readonly policyEngine: PolicyEngine,
     private readonly memoryEngine: MemoryEngine,
-    private readonly notifier?: TelegramNotifier
+    private readonly notifier?: TelegramNotifier,
+    private readonly modelRouter?: ModelRouter
   ) {}
 
   async init(): Promise<void> {
@@ -44,13 +46,15 @@ export class AgentRuntime implements KernelService {
       this.eventBus,
       this.policyEngine,
       this.memoryEngine,
-      this.notifier
+      this.notifier,
+      this.modelRouter
     );
     const nova = new ReporterAgent(
       this.eventBus,
       this.policyEngine,
       this.memoryEngine,
-      this.notifier
+      this.notifier,
+      this.modelRouter
     );
 
     this.registerAgent(aria);
