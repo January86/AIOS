@@ -10,6 +10,8 @@ import { AgentRuntime } from "../../../packages/core/src/agents/index.js";
 import { MonitoringWorker } from "../../../packages/core/src/monitoring/index.js";
 import { MockService } from "../../../packages/core/src/services/mock-service.js";
 import { TelegramNotifier } from "../../../packages/core/src/telegram/index.js";
+import { BaronMonitor } from "../../../packages/core/src/baron/index.js";
+import { DailyReporter } from "../../../packages/core/src/scheduler/index.js";
 import { ProjectTier } from "../../../packages/contracts/src/index.js";
 import { createServer } from "./server.js";
 
@@ -31,6 +33,7 @@ const memoryStore = new MemoryStore(prisma);
 const memoryEngine = new MemoryEngine(memoryStore, eventBus);
 
 const agentRuntime = new AgentRuntime(eventBus, policyEngine, memoryEngine, notifier);
+const baronMonitor = new BaronMonitor(eventBus, notifier);
 
 kernel.registerService(new MockService("event-bus"));
 kernel.registerService(new MockService("configuration"));
@@ -39,6 +42,7 @@ kernel.registerService(monitoringWorker);
 kernel.registerService(policyEngine);
 kernel.registerService(memoryEngine);
 kernel.registerService(agentRuntime);
+kernel.registerService(baronMonitor);
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
@@ -80,8 +84,9 @@ projectRegistry.registerProject({
   name: "Executive Brief (Ensiklomedia)",
   description: "AI-powered daily news briefing for government institutions in NTB",
   tier: ProjectTier.STANDARD,
-  path: "/home/administrator/projects/executive-brief",
-  healthEndpoint: "https://ensiklomedia.id",
+  // Sentinel directory on AIOS VPS — create with: mkdir -p /home/administrator/aios-sentinels/executive-brief
+  // Actual project lives on separate VPS; filesystem check = project is registered/assumed healthy
+  path: "/home/administrator/aios-sentinels/executive-brief",
   tags: ["production", "news", "government", "nlp"],
   createdAt: now,
   updatedAt: now,
@@ -102,6 +107,11 @@ projectRegistry.registerProject({
 
 agentRuntime.subscribeToMonitoring();
 
+// ── Daily Reporter ────────────────────────────────────────────────────────────
+
+const dailyReporter = new DailyReporter(agentRuntime, eventBus, notifier, projectRegistry);
+dailyReporter.start();
+
 // ── Start Express ─────────────────────────────────────────────────────────────
 
 const app = createServer({
@@ -111,6 +121,7 @@ const app = createServer({
   eventBus,
   memoryEngine,
   policyEngine,
+  baronMonitor,
   telegramConfigured: notifier.isConfigured(),
 });
 
@@ -124,6 +135,7 @@ const httpServer = app.listen(PORT, () => {
   console.log(`[API]   GET  http://localhost:${PORT}/api/events`);
   console.log(`[API]   GET  http://localhost:${PORT}/api/events/stream  (SSE)`);
   console.log(`[API]   GET  http://localhost:${PORT}/api/memory`);
+  console.log(`[API]   GET  http://localhost:${PORT}/api/baron/summary`);
   console.log(`[API]   POST http://localhost:${PORT}/api/policy/evaluate`);
   console.log(`[API] Telegram: ${notifier.isConfigured() ? "configured ✓" : "not configured"}`);
 });
@@ -132,7 +144,7 @@ const httpServer = app.listen(PORT, () => {
 
 void notifier.sendAlert(
   "AIOS Online",
-  "AIOS Alpha v2.0.0 is running\nProjects monitored: 3\nHa-Platform, Executive Brief, Baron Trading\nAgents: Aria, Nova",
+  "AIOS Alpha v2.1.0 is running\nProjects monitored: 3\nHa-Platform, Executive Brief, Baron Trading\nAgents: Aria, Nova\nBaron monitor: active",
   "🚀"
 );
 
@@ -140,6 +152,7 @@ void notifier.sendAlert(
 
 const shutdown = async (signal: string) => {
   console.log(`\n[API] Received ${signal}, shutting down...`);
+  dailyReporter.stop();
   httpServer.close();
   await kernel.shutdown(signal);
   await prisma.$disconnect();

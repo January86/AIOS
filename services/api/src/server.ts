@@ -7,6 +7,7 @@ import type { InMemoryEventBus } from "../../../packages/events/src/index.js";
 import type { MemoryEngine } from "../../../packages/memory/src/index.js";
 import type { PolicyEngine } from "../../../packages/policy/src/index.js";
 import type { ProjectRegistry } from "../../../packages/project-runtime/src/index.js";
+import type { BaronMonitor } from "../../../packages/core/src/baron/index.js";
 import { EventType } from "../../../packages/contracts/src/index.js";
 import type {
   ActionCategory,
@@ -20,6 +21,7 @@ interface Deps {
   eventBus: InMemoryEventBus;
   memoryEngine: MemoryEngine;
   policyEngine: PolicyEngine;
+  baronMonitor: BaronMonitor;
   telegramConfigured: boolean;
 }
 
@@ -40,7 +42,7 @@ function fail(res: Response, message: string, status = 500) {
 }
 
 export function createServer(deps: Deps): express.Express {
-  const { kernel, projectRegistry, agentRuntime, eventBus, memoryEngine, policyEngine, telegramConfigured } = deps;
+  const { kernel, projectRegistry, agentRuntime, eventBus, memoryEngine, policyEngine, baronMonitor, telegramConfigured } = deps;
   const app = express();
 
   app.use(cors());
@@ -65,6 +67,7 @@ export function createServer(deps: Deps): express.Express {
         projects: projectRegistry.listProjects(),
         agents: agentRuntime.listAgents(),
         recentEvents: eventBus.getEvents({ limit: 20 }).reverse(),
+        baron: baronMonitor.getSummary(),
       });
     } catch (e) {
       fail(res, e instanceof Error ? e.message : String(e));
@@ -137,6 +140,15 @@ export function createServer(deps: Deps): express.Express {
         limit,
       });
       ok(res, memories);
+    } catch (e) {
+      fail(res, e instanceof Error ? e.message : String(e));
+    }
+  });
+
+  // GET /api/baron/summary
+  app.get("/api/baron/summary", (_req: Request, res: Response) => {
+    try {
+      ok(res, baronMonitor.getSummary());
     } catch (e) {
       fail(res, e instanceof Error ? e.message : String(e));
     }

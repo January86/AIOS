@@ -1,4 +1,5 @@
 export * from "./agent.js";
+export * from "./baron.js";
 export * from "./events.js";
 export * from "./memory.js";
 export * from "./policy.js";

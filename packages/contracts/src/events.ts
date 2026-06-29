@@ -58,6 +58,10 @@ export enum EventType {
   MEMORY_COMPRESSED = "memory.compressed",
   MEMORY_EXPIRED = "memory.expired",
   MEMORY_EVICTED = "memory.evicted",
+  // Baron
+  BARON_BALANCE_UPDATED = "baron.balance.updated",
+  BARON_CIRCUIT_TRIGGERED = "baron.circuit.triggered",
+  BARON_PROFIT_TARGET_REACHED = "baron.profit.target.reached",
 }
 
 export function createCorrelationId(): string {

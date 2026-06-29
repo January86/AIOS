@@ -62,11 +62,42 @@ interface MemoryRecord {
   scope: string;
 }
 
+interface BaronBalance {
+  accountId: string;
+  port: number;
+  balance: number;
+  currency: string;
+  lastSeen: string;
+}
+
+interface BaronDailyPnL {
+  accountName: string;
+  type: "profit" | "loss";
+  amount: number;
+  triggeredAt: string;
+}
+
+interface BaronCircuitEvent {
+  type: "loss_limit" | "profit_limit";
+  accountName: string;
+  amount: number;
+  date: string;
+}
+
+interface BaronSummary {
+  totalBalance: number;
+  accounts: BaronBalance[];
+  dailyPnL: BaronDailyPnL[];
+  circuitEvents: BaronCircuitEvent[];
+  lastUpdated: string;
+}
+
 interface SystemState {
   kernel: KernelHealth;
   projects: ProjectRecord[];
   agents: Agent[];
   recentEvents: AIOSEvent[];
+  baron?: BaronSummary;
 }
 
 // ── Color helpers ─────────────────────────────────────────────────────────────
@@ -78,6 +109,7 @@ function eventColor(type: string): string {
   if (type.startsWith("memory.")) return "#14b8a6";
   if (type.startsWith("monitoring.")) return "#6366f1";
   if (type.startsWith("project.")) return "#84cc16";
+  if (type.startsWith("baron.")) return "#f59e0b";
   return "#6b7280";
 }
 
@@ -327,6 +359,101 @@ function MemoryCard({ records }: { records: MemoryRecord[] }) {
   );
 }
 
+function BaronCard({ baron }: { baron: BaronSummary | null }) {
+  if (!baron) {
+    return (
+      <Card title="Baron Trading System">
+        <span style={{ color: "#4a4a6a" }}>Loading...</span>
+      </Card>
+    );
+  }
+
+  const hasCircuit = baron.circuitEvents.length > 0;
+
+  return (
+    <Card title="Baron Trading System">
+      <Row label="Total Balance">
+        <span style={{ color: "#f59e0b", fontFamily: "'Share Tech Mono', monospace", fontSize: 14, fontWeight: 700 }}>
+          ${baron.totalBalance.toFixed(2)}
+        </span>
+      </Row>
+
+      {baron.accounts.length === 0 && (
+        <span style={{ color: "#4a4a6a", fontSize: 12 }}>No active accounts detected</span>
+      )}
+
+      {baron.accounts.map((acc) => (
+        <div
+          key={acc.accountId}
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            background: "#0a0a0f",
+            border: "1px solid #1e1e2e",
+            borderRadius: 4,
+            padding: "4px 8px",
+          }}
+        >
+          <span style={{ color: "#4a4a6a", fontSize: 11, fontFamily: "'Share Tech Mono', monospace" }}>
+            :{acc.port}
+          </span>
+          <span style={{ color: "#e2e2f0", fontSize: 12, fontFamily: "'Share Tech Mono', monospace" }}>
+            {acc.balance.toFixed(2)} {acc.currency}
+          </span>
+        </div>
+      ))}
+
+      {baron.dailyPnL.length > 0 && (
+        <div style={{ marginTop: 4 }}>
+          <div style={{ color: "#4a4a6a", fontSize: 11, marginBottom: 4 }}>Daily PnL Events</div>
+          {baron.dailyPnL.map((pnl, i) => (
+            <div
+              key={i}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                fontSize: 12,
+                padding: "2px 0",
+              }}
+            >
+              <span style={{ color: "#e2e2f0" }}>{pnl.accountName}</span>
+              <span style={{ color: pnl.type === "profit" ? "#22c55e" : "#ef4444" }}>
+                {pnl.type === "profit" ? "+" : "-"}${Math.abs(pnl.amount).toFixed(2)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {hasCircuit && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            background: "#1a0808",
+            border: "1px solid #ef444444",
+            borderRadius: 4,
+            padding: "4px 8px",
+            marginTop: 4,
+          }}
+        >
+          <Badge label="CIRCUIT BREAKER" color="#ef4444" />
+          <span style={{ color: "#ef4444", fontSize: 11 }}>
+            {baron.circuitEvents.map((e) => e.accountName).join(", ")}
+          </span>
+        </div>
+      )}
+
+      <div style={{ color: "#4a4a6a", fontSize: 10, marginTop: 2 }}>
+        Updated: {new Date(baron.lastUpdated).toLocaleTimeString("en-US", { hour12: false })}
+      </div>
+    </Card>
+  );
+}
+
 function EventRow({ event }: { event: AIOSEvent }) {
   const color = eventColor(event.type);
   const ts = new Date(event.timestamp).toLocaleTimeString("en-US", {
@@ -369,6 +496,7 @@ export default function CommandCenter() {
   const [system, setSystem] = useState<SystemState | null>(null);
   const [memories, setMemories] = useState<MemoryRecord[]>([]);
   const [liveEvents, setLiveEvents] = useState<AIOSEvent[]>([]);
+  const [baronSummary, setBaronSummary] = useState<BaronSummary | null>(null);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const feedRef = useRef<HTMLDivElement>(null);
@@ -381,6 +509,7 @@ export default function CommandCenter() {
         const body = await res.json() as { ok: boolean; data: SystemState };
         if (body.ok) {
           setSystem(body.data);
+          if (body.data.baron) setBaronSummary(body.data.baron);
           setError(null);
         }
       } catch {
@@ -405,6 +534,22 @@ export default function CommandCenter() {
     };
     void fetchMemory();
     const id = setInterval(() => void fetchMemory(), 10_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Poll baron summary every 60 s
+  useEffect(() => {
+    const fetchBaron = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/baron/summary`);
+        const body = await res.json() as { ok: boolean; data: BaronSummary };
+        if (body.ok) setBaronSummary(body.data);
+      } catch {
+        // silent — baron is non-critical
+      }
+    };
+    void fetchBaron();
+    const id = setInterval(() => void fetchBaron(), 60_000);
     return () => clearInterval(id);
   }, []);
 
@@ -464,7 +609,7 @@ export default function CommandCenter() {
               fontWeight: 700,
             }}
           >
-            v2.0.0 ALPHA
+            v2.1.0 ALPHA
           </span>
         </div>
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
@@ -527,6 +672,9 @@ export default function CommandCenter() {
           <ProjectsCard projects={system?.projects ?? []} />
           <AgentsCard agents={system?.agents ?? []} />
         </div>
+
+        {/* Baron section */}
+        <BaronCard baron={baronSummary} />
 
         {/* Memory section */}
         <MemoryCard records={memories} />

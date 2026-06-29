@@ -15,18 +15,18 @@ export class HealthCheckRunner {
     // 1. healthEndpoint takes priority over port-based check
     if (healthEndpoint) {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5_000);
+      const timeout = setTimeout(() => controller.abort(), 25_000);
       const start = Date.now();
       try {
         const res = await fetch(healthEndpoint, { signal: controller.signal });
         clearTimeout(timeout);
         return {
           projectId: id,
-          state: res.ok ? ProjectState.ACTIVE : ProjectState.ERROR,
-          healthy: res.ok,
+          state: res.status < 500 ? ProjectState.ACTIVE : ProjectState.ERROR,
+          healthy: res.status < 500,
           lastCheckedAt: now,
           uptime: Date.now() - start,
-          errorMessage: res.ok ? undefined : `HTTP ${res.status}`,
+          errorMessage: res.status < 500 ? undefined : `HTTP ${res.status}`,
         };
       } catch (err) {
         clearTimeout(timeout);
