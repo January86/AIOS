@@ -3,6 +3,7 @@ import type { ProjectHealth, ServiceHealth, ServiceState } from "../../../contra
 import type { InMemoryEventBus } from "../../../events/src/index.js";
 import type { ProjectRegistry } from "../../../project-runtime/src/index.js";
 import { HealthCheckRunner } from "./health-check-runner.js";
+import { HealthHistory } from "./health-history.js";
 
 export class MonitoringWorker {
   readonly name = "monitoring-worker";
@@ -10,6 +11,7 @@ export class MonitoringWorker {
   private intervalId?: ReturnType<typeof setInterval>;
   private readonly previousHealth = new Map<string, boolean>();
   private readonly healthRunner = new HealthCheckRunner();
+  private readonly _healthHistory = new HealthHistory();
 
   constructor(
     private readonly eventBus: InMemoryEventBus,
@@ -70,6 +72,8 @@ export class MonitoringWorker {
         errorMessage: newHealth.errorMessage,
       });
 
+      this._healthHistory.record(project.config.id, newHealth.healthy, newHealth.uptime);
+
       await this.eventBus.publish(
         createEvent({
           type: EventType.MONITORING_CHECK_COMPLETED,
@@ -113,5 +117,9 @@ export class MonitoringWorker {
 
       this.previousHealth.set(project.config.id, newHealth.healthy);
     }
+  }
+
+  get healthHistory(): HealthHistory {
+    return this._healthHistory;
   }
 }

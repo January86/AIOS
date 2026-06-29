@@ -56,6 +56,34 @@ export class HealthCheckRunner {
     // 3. Filesystem presence check (e.g. baron-trading: path only)
     const exists = existsSync(path);
     if (exists) {
+      const heartbeatFile = join(path, 'heartbeat');
+      if (existsSync(heartbeatFile)) {
+        try {
+          const content = readFileSync(heartbeatFile, 'utf8').trim();
+          const lastUpdate = new Date(content);
+          const ageMs = Date.now() - lastUpdate.getTime();
+          const ageMins = Math.floor(ageMs / 60000);
+          if (ageMs > 10 * 60 * 1000) {
+            return {
+              projectId: id,
+              state: ProjectState.ERROR,
+              healthy: false,
+              lastCheckedAt: now,
+              errorMessage: `Heartbeat stale: last update ${ageMins}m ago`,
+            };
+          }
+          return {
+            projectId: id,
+            state: ProjectState.ACTIVE,
+            healthy: true,
+            lastCheckedAt: now,
+            uptime: ageMs,
+          };
+        } catch {
+          // non-fatal — fall through to directory-exists check
+        }
+      }
+
       const logsDir = join(path, "logs");
       if (existsSync(logsDir)) {
         try {

@@ -122,6 +122,7 @@ const app = createServer({
   memoryEngine,
   policyEngine,
   baronMonitor,
+  monitoringWorker,
   telegramConfigured: notifier.isConfigured(),
 });
 

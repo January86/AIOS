@@ -1,6 +1,8 @@
 import cors from "cors";
 import express from "express";
 import type { Request, Response } from "express";
+import { existsSync, readFileSync } from "fs";
+import { join } from "path";
 import type { AIOSKernel } from "../../../packages/core/src/kernel.js";
 import type { AgentRuntime } from "../../../packages/core/src/agents/index.js";
 import type { InMemoryEventBus } from "../../../packages/events/src/index.js";
@@ -8,6 +10,7 @@ import type { MemoryEngine } from "../../../packages/memory/src/index.js";
 import type { PolicyEngine } from "../../../packages/policy/src/index.js";
 import type { ProjectRegistry } from "../../../packages/project-runtime/src/index.js";
 import type { BaronMonitor } from "../../../packages/core/src/baron/index.js";
+import type { MonitoringWorker } from "../../../packages/core/src/monitoring/index.js";
 import { EventType } from "../../../packages/contracts/src/index.js";
 import type {
   ActionCategory,
@@ -22,6 +25,7 @@ interface Deps {
   memoryEngine: MemoryEngine;
   policyEngine: PolicyEngine;
   baronMonitor: BaronMonitor;
+  monitoringWorker: MonitoringWorker;
   telegramConfigured: boolean;
 }
 
@@ -42,7 +46,7 @@ function fail(res: Response, message: string, status = 500) {
 }
 
 export function createServer(deps: Deps): express.Express {
-  const { kernel, projectRegistry, agentRuntime, eventBus, memoryEngine, policyEngine, baronMonitor, telegramConfigured } = deps;
+  const { kernel, projectRegistry, agentRuntime, eventBus, memoryEngine, policyEngine, baronMonitor, monitoringWorker, telegramConfigured } = deps;
   const app = express();
 
   app.use(cors());
@@ -145,10 +149,47 @@ export function createServer(deps: Deps): express.Express {
     }
   });
 
+  // GET /api/projects/:id/history
+  app.get("/api/projects/:id/history", (req: Request, res: Response) => {
+    const projectId = req.params["id"] ?? "";
+    const project = projectRegistry.getProject(projectId);
+    if (!project) {
+      fail(res, `Project not found: ${projectId}`, 404);
+      return;
+    }
+    const hh = monitoringWorker.healthHistory;
+    ok(res, {
+      history: hh.getHistory(projectId),
+      uptimePercent: hh.getUptimePercent(projectId),
+      lastIncident: hh.getLastIncident(projectId),
+      avgResponseTime: hh.getAverageResponseTime(projectId),
+    });
+  });
+
   // GET /api/baron/summary
   app.get("/api/baron/summary", (_req: Request, res: Response) => {
     try {
       ok(res, baronMonitor.getSummary());
+    } catch (e) {
+      fail(res, e instanceof Error ? e.message : String(e));
+    }
+  });
+
+  // GET /api/sentinel/:projectId/status
+  app.get("/api/sentinel/:projectId/status", (req: Request, res: Response) => {
+    const projectId = req.params["projectId"] ?? "";
+    const sentinelDir = "/home/administrator/aios-sentinels";
+    const heartbeatFile = join(sentinelDir, projectId, "heartbeat");
+    if (!existsSync(heartbeatFile)) {
+      fail(res, `Sentinel not found for project: ${projectId}`, 404);
+      return;
+    }
+    try {
+      const content = readFileSync(heartbeatFile, "utf8").trim();
+      const lastHeartbeat = new Date(content).toISOString();
+      const ageMs = Date.now() - new Date(content).getTime();
+      const ageMins = Math.floor(ageMs / 60000);
+      ok(res, { projectId, lastHeartbeat, ageMs, ageMins, stale: ageMs > 600000 });
     } catch (e) {
       fail(res, e instanceof Error ? e.message : String(e));
     }

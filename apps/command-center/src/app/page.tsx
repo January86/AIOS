@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const API_BASE = "http://localhost:3333";
 
@@ -65,6 +65,7 @@ interface MemoryRecord {
 interface BaronBalance {
   accountId: string;
   port: number;
+  name?: string;
   balance: number;
   currency: string;
   lastSeen: string;
@@ -84,12 +85,52 @@ interface BaronCircuitEvent {
   date: string;
 }
 
+interface BaronTodayPnLAccount {
+  totalProfit: number;
+  trades: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+}
+
+interface BaronTodayPnL {
+  date: string;
+  accounts: Record<string, BaronTodayPnLAccount>;
+  totalPnL: number;
+}
+
+interface BaronBalancePoint {
+  timestamp: string;
+  balance: number;
+}
+
+interface BaronBalanceHistory {
+  accountId: string;
+  port: number;
+  points: BaronBalancePoint[];
+}
+
 interface BaronSummary {
   totalBalance: number;
   accounts: BaronBalance[];
   dailyPnL: BaronDailyPnL[];
   circuitEvents: BaronCircuitEvent[];
+  todayPnL?: BaronTodayPnL;
+  balanceHistory?: BaronBalanceHistory[];
   lastUpdated: string;
+}
+
+interface HealthPoint {
+  timestamp: string;
+  healthy: boolean;
+  responseTime?: number;
+}
+
+interface ProjectHistoryData {
+  history: HealthPoint[];
+  uptimePercent: number;
+  lastIncident: HealthPoint | null;
+  avgResponseTime: number | null;
 }
 
 interface SystemState {
@@ -137,6 +178,12 @@ function dot(healthy: boolean) {
       ●
     </span>
   );
+}
+
+function uptimeColor(pct: number): string {
+  if (pct >= 90) return "#22c55e";
+  if (pct >= 70) return "#eab308";
+  return "#ef4444";
 }
 
 // ── Uptime ────────────────────────────────────────────────────────────────────
@@ -234,6 +281,187 @@ function Row({
   );
 }
 
+// ── SVG Sparkline (inline, no library) ───────────────────────────────────────
+
+function BalanceSparkline({ points }: { points: BaronBalancePoint[] }) {
+  if (points.length < 2) return null;
+
+  const W = 240;
+  const H = 40;
+  const pad = 2;
+
+  const values = points.map((p) => p.balance);
+  const minV = Math.min(...values);
+  const maxV = Math.max(...values);
+  const range = maxV - minV || 1;
+
+  const toX = (i: number) => pad + ((i / (points.length - 1)) * (W - pad * 2));
+  const toY = (v: number) => H - pad - ((v - minV) / range) * (H - pad * 2);
+
+  const d = points
+    .map((p, i) => `${i === 0 ? "M" : "L"}${toX(i).toFixed(1)},${toY(p.balance).toFixed(1)}`)
+    .join(" ");
+
+  return (
+    <svg
+      width="100%"
+      height={H}
+      viewBox={`0 0 ${W} ${H}`}
+      style={{ display: "block", background: "#0a0a0f", borderRadius: 3 }}
+      preserveAspectRatio="none"
+    >
+      <path d={d} stroke="#22c55e" strokeWidth="1.5" fill="none" />
+    </svg>
+  );
+}
+
+// ── Health Dots Sparkline ─────────────────────────────────────────────────────
+
+function HealthDots({ points }: { points: HealthPoint[] }) {
+  if (points.length === 0) {
+    return <span style={{ color: "#4a4a6a", fontSize: 11 }}>No data yet</span>;
+  }
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
+      {points.map((p, i) => (
+        <div
+          key={i}
+          title={`${new Date(p.timestamp).toLocaleTimeString("en-US", { hour12: false })} — ${p.healthy ? "healthy" : "unhealthy"}${p.responseTime !== undefined ? ` (${p.responseTime}ms)` : ""}`}
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: 2,
+            background: p.healthy ? "#22c55e" : "#ef4444",
+            flexShrink: 0,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ── Uptime Bar ────────────────────────────────────────────────────────────────
+
+function UptimeBar({ pct }: { pct: number }) {
+  const color = uptimeColor(pct);
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div
+        style={{
+          flex: 1,
+          height: 6,
+          background: "#1e1e2e",
+          borderRadius: 3,
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            width: `${Math.min(pct, 100).toFixed(1)}%`,
+            height: "100%",
+            background: color,
+            borderRadius: 3,
+            transition: "width 0.3s ease",
+          }}
+        />
+      </div>
+      <span style={{ color, fontSize: 11, fontFamily: "'Share Tech Mono', monospace", minWidth: 42, textAlign: "right" }}>
+        {pct.toFixed(1)}%
+      </span>
+    </div>
+  );
+}
+
+// ── Project Detail Panel ──────────────────────────────────────────────────────
+
+function ProjectDetailPanel({ projectId }: { projectId: string }) {
+  const [data, setData] = useState<ProjectHistoryData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/projects/${projectId}/history`);
+        const body = await res.json() as { ok: boolean; data: ProjectHistoryData };
+        if (alive && body.ok) setData(body.data);
+      } catch {
+        // silent
+      } finally {
+        if (alive) setLoading(false);
+      }
+    };
+    void load();
+    return () => { alive = false; };
+  }, [projectId]);
+
+  if (loading) {
+    return (
+      <div style={{ padding: "8px 0 4px 18px", color: "#4a4a6a", fontSize: 11 }}>
+        Loading history...
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div style={{ padding: "8px 0 4px 18px", color: "#4a4a6a", fontSize: 11 }}>
+        No history data
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        marginTop: 6,
+        marginLeft: 18,
+        background: "#0a0a0f",
+        border: "1px solid #1e1e2e",
+        borderRadius: 4,
+        padding: "8px 10px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 6,
+      }}
+    >
+      <div>
+        <div style={{ color: "#4a4a6a", fontSize: 10, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+          Uptime ({data.history.length} checks)
+        </div>
+        <UptimeBar pct={data.uptimePercent} />
+      </div>
+
+      {data.avgResponseTime !== null && (
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <span style={{ color: "#4a4a6a", fontSize: 11 }}>Avg response</span>
+          <span style={{ color: "#e2e2f0", fontSize: 11, fontFamily: "'Share Tech Mono', monospace" }}>
+            {Math.round(data.avgResponseTime)}ms
+          </span>
+        </div>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "space-between" }}>
+        <span style={{ color: "#4a4a6a", fontSize: 11 }}>Last incident</span>
+        <span style={{ color: data.lastIncident ? "#ef4444" : "#22c55e", fontSize: 11 }}>
+          {data.lastIncident
+            ? new Date(data.lastIncident.timestamp).toLocaleString("en-US", { hour12: false, month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+            : "No incidents"}
+        </span>
+      </div>
+
+      <div>
+        <div style={{ color: "#4a4a6a", fontSize: 10, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+          Health history (newest right)
+        </div>
+        <HealthDots points={data.history} />
+      </div>
+    </div>
+  );
+}
+
+// ── KernelCard ────────────────────────────────────────────────────────────────
+
 function KernelCard({ kernel }: { kernel: KernelHealth }) {
   const uptime = useUptime(kernel.startedAt);
   const healthyCount = kernel.services.filter((s) => s.healthy).length;
@@ -257,7 +485,15 @@ function KernelCard({ kernel }: { kernel: KernelHealth }) {
   );
 }
 
+// ── ProjectsCard ──────────────────────────────────────────────────────────────
+
 function ProjectsCard({ projects }: { projects: ProjectRecord[] }) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const toggle = useCallback((id: string) => {
+    setExpandedId((prev) => (prev === id ? null : id));
+  }, []);
+
   return (
     <Card title={`Projects (${projects.length})`}>
       {projects.length === 0 && (
@@ -265,12 +501,31 @@ function ProjectsCard({ projects }: { projects: ProjectRecord[] }) {
       )}
       {projects.map((p) => (
         <div key={p.config.id}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div
+            onClick={() => toggle(p.config.id)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              cursor: "pointer",
+              borderRadius: 3,
+              padding: "2px 4px",
+              margin: "-2px -4px",
+              transition: "background 0.15s",
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = "#1e1e2e"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}
+          >
             <span style={{ color: "#e2e2f0" }}>
               {dot(p.health.healthy)}
               {p.config.name}
             </span>
-            <Badge label={cap(p.health.state)} color={stateColor(p.health.state)} />
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <Badge label={cap(p.health.state)} color={stateColor(p.health.state)} />
+              <span style={{ color: "#4a4a6a", fontSize: 11 }}>
+                {expandedId === p.config.id ? "▲" : "▼"}
+              </span>
+            </div>
           </div>
           <div style={{ marginLeft: 18, color: "#4a4a6a", fontSize: 11 }}>
             {p.config.id}
@@ -279,11 +534,16 @@ function ProjectsCard({ projects }: { projects: ProjectRecord[] }) {
               <span style={{ color: "#ef4444" }}> — {p.health.errorMessage}</span>
             )}
           </div>
+          {expandedId === p.config.id && (
+            <ProjectDetailPanel projectId={p.config.id} />
+          )}
         </div>
       ))}
     </Card>
   );
 }
+
+// ── AgentsCard ────────────────────────────────────────────────────────────────
 
 function AgentsCard({ agents }: { agents: Agent[] }) {
   return (
@@ -305,6 +565,8 @@ function AgentsCard({ agents }: { agents: Agent[] }) {
     </Card>
   );
 }
+
+// ── MemoryCard ────────────────────────────────────────────────────────────────
 
 function MemoryCard({ records }: { records: MemoryRecord[] }) {
   return (
@@ -359,6 +621,8 @@ function MemoryCard({ records }: { records: MemoryRecord[] }) {
   );
 }
 
+// ── BaronCard ─────────────────────────────────────────────────────────────────
+
 function BaronCard({ baron }: { baron: BaronSummary | null }) {
   if (!baron) {
     return (
@@ -369,6 +633,9 @@ function BaronCard({ baron }: { baron: BaronSummary | null }) {
   }
 
   const hasCircuit = baron.circuitEvents.length > 0;
+  const todayPnL = baron.todayPnL;
+  const balanceHistory = baron.balanceHistory ?? [];
+  const todayAccounts = todayPnL ? Object.entries(todayPnL.accounts) : [];
 
   return (
     <Card title="Baron Trading System">
@@ -382,27 +649,41 @@ function BaronCard({ baron }: { baron: BaronSummary | null }) {
         <span style={{ color: "#4a4a6a", fontSize: 12 }}>No active accounts detected</span>
       )}
 
-      {baron.accounts.map((acc) => (
-        <div
-          key={acc.accountId}
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            background: "#0a0a0f",
-            border: "1px solid #1e1e2e",
-            borderRadius: 4,
-            padding: "4px 8px",
-          }}
-        >
-          <span style={{ color: "#4a4a6a", fontSize: 11, fontFamily: "'Share Tech Mono', monospace" }}>
-            :{acc.port}
-          </span>
-          <span style={{ color: "#e2e2f0", fontSize: 12, fontFamily: "'Share Tech Mono', monospace" }}>
-            {acc.balance.toFixed(2)} {acc.currency}
-          </span>
-        </div>
-      ))}
+      {baron.accounts.map((acc) => {
+        const histEntry = balanceHistory.find((h) => h.accountId === acc.accountId);
+        return (
+          <div key={acc.accountId}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                background: "#0a0a0f",
+                border: "1px solid #1e1e2e",
+                borderRadius: 4,
+                padding: "4px 8px",
+              }}
+            >
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                <span style={{ color: "#e2e2f0", fontSize: 12, fontFamily: "'Share Tech Mono', monospace" }}>
+                  {acc.name ?? `Akun ${acc.port}`}
+                </span>
+                <span style={{ color: "#4a4a6a", fontSize: 10, fontFamily: "'Share Tech Mono', monospace" }}>
+                  :{acc.port}
+                </span>
+              </div>
+              <span style={{ color: "#e2e2f0", fontSize: 12, fontFamily: "'Share Tech Mono', monospace" }}>
+                {acc.balance.toFixed(2)} {acc.currency}
+              </span>
+            </div>
+            {histEntry && histEntry.points.length > 3 && (
+              <div style={{ marginTop: 3 }}>
+                <BalanceSparkline points={histEntry.points} />
+              </div>
+            )}
+          </div>
+        );
+      })}
 
       {baron.dailyPnL.length > 0 && (
         <div style={{ marginTop: 4 }}>
@@ -424,6 +705,76 @@ function BaronCard({ baron }: { baron: BaronSummary | null }) {
               </span>
             </div>
           ))}
+        </div>
+      )}
+
+      {todayPnL && (
+        <div
+          style={{
+            marginTop: 4,
+            background: "#0a0a0f",
+            border: "1px solid #1e1e2e",
+            borderRadius: 4,
+            padding: "6px 8px",
+          }}
+        >
+          <div style={{ color: "#4a4a6a", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
+            Today&apos;s P&L — {todayPnL.date}
+          </div>
+
+          {todayAccounts.length === 0 ? (
+            <div style={{ color: "#4a4a6a", fontSize: 11 }}>No closed trades today</div>
+          ) : (
+            todayAccounts.map(([accountId, acc]) => (
+              <div
+                key={accountId}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  fontSize: 11,
+                  padding: "2px 0",
+                  borderBottom: "1px solid #1e1e2e",
+                  marginBottom: 2,
+                }}
+              >
+                <span style={{ color: "#e2e2f0", fontFamily: "'Share Tech Mono', monospace" }}>
+                  {accountId}
+                </span>
+                <span style={{ color: "#4a4a6a" }}>
+                  {acc.trades}T {acc.wins}W/{acc.losses}L
+                </span>
+                <span style={{ color: acc.totalProfit >= 0 ? "#22c55e" : "#ef4444", fontFamily: "'Share Tech Mono', monospace", fontWeight: 700 }}>
+                  {acc.totalProfit >= 0 ? "+" : ""}${acc.totalProfit.toFixed(2)}
+                </span>
+              </div>
+            ))
+          )}
+
+          {todayAccounts.length > 0 && (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginTop: 4,
+                paddingTop: 4,
+                borderTop: "1px solid #1e1e2e",
+              }}
+            >
+              <span style={{ color: "#4a4a6a", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em" }}>Total</span>
+              <span
+                style={{
+                  color: todayPnL.totalPnL >= 0 ? "#22c55e" : "#ef4444",
+                  fontFamily: "'Share Tech Mono', monospace",
+                  fontSize: 13,
+                  fontWeight: 700,
+                }}
+              >
+                {todayPnL.totalPnL >= 0 ? "+" : ""}${todayPnL.totalPnL.toFixed(2)}
+              </span>
+            </div>
+          )}
         </div>
       )}
 
@@ -453,6 +804,8 @@ function BaronCard({ baron }: { baron: BaronSummary | null }) {
     </Card>
   );
 }
+
+// ── EventRow ──────────────────────────────────────────────────────────────────
 
 function EventRow({ event }: { event: AIOSEvent }) {
   const color = eventColor(event.type);
@@ -609,7 +962,7 @@ export default function CommandCenter() {
               fontWeight: 700,
             }}
           >
-            v2.1.0 ALPHA
+            v2.2.0 ALPHA
           </span>
         </div>
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>

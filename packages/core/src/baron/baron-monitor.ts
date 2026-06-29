@@ -21,6 +21,12 @@ export class BaronMonitor implements KernelService {
     accounts: [],
     dailyPnL: [],
     circuitEvents: [],
+    todayPnL: {
+      date: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(new Date()),
+      accounts: {},
+      totalPnL: 0,
+    },
+    balanceHistory: [],
     lastUpdated: new Date().toISOString(),
   };
 
